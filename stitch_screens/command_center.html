@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Solar Flora Dashboard</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary": "#4f635b",
+                        "surface-tint": "#4f635b",
+                        "on-primary-fixed-variant": "#374b44",
+                        "surface": "#f1fcf1",
+                        "on-secondary": "#ffffff",
+                        "inverse-surface": "#28332c",
+                        "primary-container": "#d1e7dd",
+                        "on-tertiary-fixed-variant": "#444844",
+                        "on-background": "#141e17",
+                        "on-tertiary": "#ffffff",
+                        "secondary-fixed": "#d3e4fc",
+                        "surface-container-highest": "#dae6db",
+                        "on-secondary-fixed-variant": "#38485b",
+                        "tertiary": "#5c5f5b",
+                        "surface-container": "#e5f1e6",
+                        "on-tertiary-fixed": "#191c19",
+                        "inverse-primary": "#b6cbc2",
+                        "primary-fixed": "#d1e7dd",
+                        "tertiary-container": "#e1e3dd",
+                        "tertiary-fixed-dim": "#c5c7c2",
+                        "error": "#ba1a1a",
+                        "on-primary-container": "#546860",
+                        "on-surface-variant": "#424845",
+                        "inverse-on-surface": "#e8f4e9",
+                        "secondary": "#4f6074",
+                        "primary-fixed-dim": "#b6cbc2",
+                        "on-secondary-container": "#546478",
+                        "surface-variant": "#dae6db",
+                        "surface-bright": "#f1fcf1",
+                        "secondary-fixed-dim": "#b7c8df",
+                        "on-error-container": "#93000a",
+                        "on-primary": "#ffffff",
+                        "surface-dim": "#d1ddd3",
+                        "outline-variant": "#c2c8c4",
+                        "surface-container-low": "#ebf7ec",
+                        "surface-container-lowest": "#ffffff",
+                        "on-surface": "#141e17",
+                        "on-secondary-fixed": "#0b1d2e",
+                        "surface-container-high": "#dfebe0",
+                        "outline": "#727875",
+                        "tertiary-fixed": "#e1e3dd",
+                        "on-error": "#ffffff",
+                        "on-tertiary-container": "#626561",
+                        "on-primary-fixed": "#0c1f19",
+                        "background": "#f1fcf1",
+                        "error-container": "#ffdad6",
+                        "secondary-container": "#d0e1f9"
+                    },
+                    borderRadius: {
+                        "DEFAULT": "0.25rem",
+                        "lg": "0.5rem",
+                        "xl": "0.75rem",
+                        "full": "9999px"
+                    },
+                    spacing: {
+                        "gutter": "20px",
+                        "xs": "4px",
+                        "base": "8px",
+                        "md": "24px",
+                        "margin-mobile": "20px",
+                        "xl": "80px",
+                        "sm": "12px",
+                        "lg": "48px",
+                        "margin-desktop": "64px"
+                    },
+                    fontFamily: {
+                        "body-lg": ["Manrope"],
+                        "label-sm": ["Manrope"],
+                        "label-md": ["Manrope"],
+                        "headline-lg-mobile": ["Manrope"],
+                        "headline-lg": ["Manrope"],
+                        "body-md": ["Manrope"],
+                        "headline-md": ["Manrope"]
+                    },
+                    fontSize: {
+                        "body-lg": ["18px", {"lineHeight": "1.6", "fontWeight": "400"}],
+                        "label-sm": ["12px", {"lineHeight": "1.2", "fontWeight": "500"}],
+                        "label-md": ["14px", {"lineHeight": "1.2", "letterSpacing": "0.04em", "fontWeight": "600"}],
+                        "headline-lg-mobile": ["32px", {"lineHeight": "1.2", "letterSpacing": "-0.01em", "fontWeight": "700"}],
+                        "headline-lg": ["40px", {"lineHeight": "1.2", "letterSpacing": "-0.02em", "fontWeight": "700"}],
+                        "body-md": ["16px", {"lineHeight": "1.5", "fontWeight": "400"}],
+                        "headline-md": ["24px", {"lineHeight": "1.3", "fontWeight": "600"}]
+                    }
+                }
+            }
+        }
+    </script>
+<style>
+        body { font-family: 'Manrope', sans-serif; min-height: max(884px, 100dvh); }
+        .progress-transition { transition: width 2.5s cubic-bezier(0.4, 0, 0.2, 1); }
+        .ripple {
+            position: absolute;
+            border-radius: 50%;
+            border: 2px solid #b7c8df; /* secondary-fixed-dim */
+            animation: ripple-anim 2s linear infinite;
+        }
+        @keyframes ripple-anim {
+            0% { width: 0; height: 0; opacity: 1; }
+            100% { width: 80px; height: 80px; opacity: 0; }
+        }
+
+        .glass-card {
+            background: rgba(255, 255, 255, 0.7);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.5);
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03);
+        }
+
+        .fade-in-up {
+            animation: fadeInUp 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+            opacity: 0;
+            transform: translateY(20px);
+        }
+
+        .delay-100 { animation-delay: 100ms; }
+        .delay-200 { animation-delay: 200ms; }
+        .delay-300 { animation-delay: 300ms; }
+
+        @keyframes fadeInUp {
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+        
+        .pulse-ring {
+            animation: pulseRing 3s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+        }
+
+        @keyframes pulseRing {
+            0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(79, 99, 91, 0.3); }
+            70% { transform: scale(1); box-shadow: 0 0 0 15px rgba(79, 99, 91, 0); }
+            100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(79, 99, 91, 0); }
+        }
+
+        @keyframes slideRight {
+            0% { transform: translateX(-100%); }
+            100% { transform: translateX(200%); }
+        }
+    </style>
+</head>
+<body class="bg-surface text-on-surface font-body-md overflow-x-hidden min-h-screen relative pb-24 md:pb-0 pt-16 md:pt-20">
+<!-- TopAppBar -->
+<header class="w-full top-0 sticky z-40 bg-surface border-b border-outline-variant flex justify-between items-center px-margin-mobile md:px-margin-desktop py-base">
+<button class="p-2 text-primary hover:bg-surface-container-high rounded-full transition-colors active:scale-95 flex items-center justify-center">
+<span class="material-symbols-outlined text-[24px]">eco</span>
+</button>
+<h1 class="font-headline-md text-headline-md font-bold text-primary">Solar Flora</h1>
+<button class="p-2 text-primary hover:bg-surface-container-high rounded-full transition-colors active:scale-95 flex items-center justify-center">
+<span class="material-symbols-outlined text-[24px]">settings</span>
+</button>
+</header>
+<main class="max-w-4xl mx-auto px-margin-mobile md:px-margin-desktop pt-md pb-xl">
+<!-- Top Section: Hero Element (Plant) -->
+<section class="flex flex-col items-center justify-center py-lg fade-in-up">
+<div class="relative flex items-center justify-center w-64 h-64 rounded-full glass-card pulse-ring mb-md bg-surface-container-lowest overflow-hidden">
+<!-- Watering Animation State (Hidden by default) -->
+<div class="absolute inset-0 flex-col items-center justify-center z-20 hidden backdrop-blur-sm bg-surface/30 rounded-full transition-all duration-500" id="water-anim-zone">
+<div class="relative flex items-center justify-center w-24 h-24 mb-4">
+<div class="ripple" style="animation-delay: 0s;"></div>
+<div class="ripple" style="animation-delay: 0.6s;"></div>
+<div class="ripple" style="animation-delay: 1.2s;"></div>
+<span class="material-symbols-outlined text-secondary text-4xl z-10 animate-bounce" data-icon="water_drop" data-weight="fill" style="font-variation-settings: 'FILL' 1;">water_drop</span>
+</div>
+<!-- Progress Bar -->
+<div class="w-32 h-1.5 bg-tertiary-container rounded-full overflow-hidden">
+<div class="h-full bg-secondary w-0 progress-transition rounded-full" id="water-progress"></div>
+</div>
+<p class="font-label-sm text-label-sm text-primary mt-3">Hydrating...</p>
+</div>
+<img class="w-3/4 h-3/4 object-contain drop-shadow-sm pointer-events-none" src="https://lh3.googleusercontent.com/aida/AP1WRLtDT9qJGUFJX8hoSga06y9T98JkOMMpzbcJL-p-41LuuLdzJ3pZOSpe5HjVpuAlZm58HLWyXTyTbsRR0qnwnTuJmDrIr9Vk-WYRHSAaOechtx8Wjk8GCFpm8vFAKkSNF5Zv6pAS9pXQY3PQESYWhKofvYvs84dVysNFUQNNV-sFRcbeVSLaE2PN5YtQRSCJBEuCRIzv4R4f2doSlyWpC9QxWXbR1pyvo0EWZsvUGgvHzMgex4ytRP4tqg0"/>
+</div>
+<!-- Primary Action -->
+<button class="px-10 py-4 bg-primary text-on-primary rounded-full font-label-md text-label-md tracking-wider shadow-sm hover:bg-on-primary-fixed-variant active:scale-95 transition-all duration-300 flex items-center gap-3" id="water-btn">
+<span class="material-symbols-outlined text-lg" data-icon="water_drop">water_drop</span>
+            WATER NOW
+        </button>
+</section>
+<!-- Center Section: Power Flow / Indicators -->
+<section class="py-md fade-in-up delay-100 flex items-center justify-center gap-md md:gap-lg">
+<div class="flex flex-col items-center">
+<div class="w-16 h-16 rounded-full bg-surface-container-high flex items-center justify-center text-primary mb-sm shadow-sm relative">
+<!-- Soft light-blue pulsing glow -->
+<div class="absolute w-full h-full bg-secondary-container rounded-full animate-ping opacity-60"></div>
+<span class="material-symbols-outlined text-secondary z-10 text-[32px]" data-icon="wb_sunny" data-weight="fill" style="font-variation-settings: 'FILL' 1;">wb_sunny</span>
+</div>
+<span class="font-label-sm text-label-sm text-on-surface-variant uppercase tracking-wider">Solar</span>
+</div>
+<!-- Flow Animation Container -->
+<div class="flex-1 max-w-[100px] h-1 bg-surface-variant rounded-full relative overflow-hidden hidden md:block">
+<div class="absolute top-0 left-0 h-full bg-primary w-1/2 rounded-full animate-[slideRight_2s_linear_infinite]"></div>
+</div>
+<!-- Short line for mobile -->
+<div class="w-12 h-1 bg-surface-variant rounded-full relative overflow-hidden md:hidden">
+<div class="absolute top-0 left-0 h-full bg-primary w-1/2 rounded-full animate-[slideRight_2s_linear_infinite]"></div>
+</div>
+<div class="flex flex-col items-center">
+<div class="w-16 h-16 rounded-full bg-surface-container-high flex items-center justify-center text-primary mb-sm shadow-sm">
+<!-- Battery Indicator -->
+<div class="w-5 h-10 border-[1.5px] border-outline rounded-sm relative flex flex-col justify-end p-[2px]">
+<div class="absolute -top-1 left-1/2 -translate-x-1/2 w-2 h-1 bg-outline rounded-t-sm"></div>
+<div class="w-full h-[85%] bg-primary rounded-[1px]"></div>
+</div>
+</div>
+<span class="font-label-sm text-label-sm text-on-surface-variant uppercase tracking-wider">Battery</span>
+</div>
+</section>
+</main>
+<!-- BottomNavBar (Mobile Only) -->
+<nav class="md:hidden fixed bottom-0 left-0 w-full z-50 flex justify-around items-center py-sm px-base pb-safe bg-surface-container-low rounded-t-xl border-t border-surface-variant/50">
+<button class="flex flex-col items-center justify-center bg-primary-container text-on-primary-container rounded-full px-4 py-1 hover:bg-surface-variant active:scale-95 transition-all duration-200">
+<span class="material-symbols-outlined mb-1 text-[24px]" data-icon="potted_plant" data-weight="fill" style="font-variation-settings: 'FILL' 1;">potted_plant</span>
+<span class="font-label-sm text-label-sm">Status</span>
+</button>
+<button class="flex flex-col items-center justify-center text-on-surface-variant px-4 py-1 hover:bg-surface-variant active:scale-95 transition-all duration-200">
+<span class="material-symbols-outlined mb-1 text-[24px]">solar_power</span>
+<span class="font-label-sm text-label-sm">Energy</span>
+</button>
+<button class="flex flex-col items-center justify-center text-on-surface-variant px-4 py-1 hover:bg-surface-variant active:scale-95 transition-all duration-200">
+<span class="material-symbols-outlined mb-1 text-[24px]">settings</span>
+<span class="font-label-sm text-label-sm">Settings</span>
+</button>
+</nav>
+<script>
+    // Simple Interaction Script for the 'Water Now' animation state
+    document.addEventListener('DOMContentLoaded', () => {
+        const waterBtn = document.getElementById('water-btn');
+        const animZone = document.getElementById('water-anim-zone');
+        const progress = document.getElementById('water-progress');
+        let isWatering = false;
+
+        waterBtn.addEventListener('click', () => {
+            if(isWatering) return;
+            isWatering = true;
+            
+            // Style button to active state
+            waterBtn.classList.add('opacity-50', 'pointer-events-none');
+            
+            // Show Animation Overlay
+            animZone.classList.remove('hidden');
+            animZone.classList.add('flex', 'opacity-100');
+            
+            // Trigger Progress Bar
+            setTimeout(() => {
+                progress.style.width = '100%';
+            }, 100);
+
+            // Reset after 3 seconds
+            setTimeout(() => {
+                progress.style.width = '0%';
+                animZone.classList.remove('flex', 'opacity-100');
+                animZone.classList.add('hidden');
+                
+                waterBtn.classList.remove('opacity-50', 'pointer-events-none');
+                isWatering = false;
+            }, 2800);
+        });
+    });
+</script>
+</body></html>

@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+
+<html lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Solar Flora - Settings</title>
+<!-- Material Symbols -->
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<!-- Google Fonts: Manrope -->
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<!-- Tailwind CSS with custom config -->
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+        tailwind.config = {
+          darkMode: "class",
+          theme: {
+            extend: {
+              "colors": {
+                      "primary-container": "#d1e7dd",
+                      "tertiary-fixed": "#e1e3dd",
+                      "surface": "#f1fcf1",
+                      "secondary": "#4f6074",
+                      "surface-container-highest": "#dae6db",
+                      "secondary-fixed": "#d3e4fc",
+                      "on-background": "#141e17",
+                      "on-surface": "#141e17",
+                      "surface-tint": "#4f635b",
+                      "on-surface-variant": "#424845",
+                      "on-primary-fixed": "#0c1f19",
+                      "secondary-fixed-dim": "#b7c8df",
+                      "on-error-container": "#93000a",
+                      "outline-variant": "#c2c8c4",
+                      "on-secondary-fixed": "#0b1d2e",
+                      "tertiary": "#5c5f5b",
+                      "outline": "#727875",
+                      "on-secondary-fixed-variant": "#38485b",
+                      "primary-fixed-dim": "#b6cbc2",
+                      "on-primary-container": "#546860",
+                      "on-secondary": "#ffffff",
+                      "surface-variant": "#dae6db",
+                      "surface-container": "#e5f1e6",
+                      "on-tertiary-fixed": "#191c19",
+                      "on-primary-fixed-variant": "#374b44",
+                      "primary-fixed": "#d1e7dd",
+                      "secondary-container": "#d0e1f9",
+                      "on-tertiary-container": "#626561",
+                      "on-error": "#ffffff",
+                      "inverse-primary": "#b6cbc2",
+                      "on-tertiary-fixed-variant": "#444844",
+                      "on-secondary-container": "#546478",
+                      "surface-dim": "#d1ddd3",
+                      "inverse-on-surface": "#e8f4e9",
+                      "surface-bright": "#f1fcf1",
+                      "error": "#ba1a1a",
+                      "error-container": "#ffdad6",
+                      "surface-container-lowest": "#ffffff",
+                      "primary": "#4f635b",
+                      "on-tertiary": "#ffffff",
+                      "background": "#f1fcf1",
+                      "tertiary-fixed-dim": "#c5c7c2",
+                      "tertiary-container": "#e1e3dd",
+                      "surface-container-low": "#ebf7ec",
+                      "surface-container-high": "#dfebe0",
+                      "on-primary": "#ffffff",
+                      "inverse-surface": "#28332c"
+              },
+              "borderRadius": {
+                      "DEFAULT": "0.25rem",
+                      "lg": "0.5rem",
+                      "xl": "0.75rem",
+                      "full": "9999px"
+              },
+              "spacing": {
+                      "xl": "80px",
+                      "margin-mobile": "20px",
+                      "base": "8px",
+                      "margin-desktop": "64px",
+                      "md": "24px",
+                      "sm": "12px",
+                      "lg": "48px",
+                      "xs": "4px",
+                      "gutter": "20px"
+              },
+              "fontFamily": {
+                      "headline-lg": ["Manrope"],
+                      "body-lg": ["Manrope"],
+                      "headline-md": ["Manrope"],
+                      "label-md": ["Manrope"],
+                      "headline-lg-mobile": ["Manrope"],
+                      "body-md": ["Manrope"],
+                      "label-sm": ["Manrope"]
+              },
+              "fontSize": {
+                      "headline-lg": ["40px", {"lineHeight": "1.2", "letterSpacing": "-0.02em", "fontWeight": "700"}],
+                      "body-lg": ["18px", {"lineHeight": "1.6", "fontWeight": "400"}],
+                      "headline-md": ["24px", {"lineHeight": "1.3", "fontWeight": "600"}],
+                      "label-md": ["14px", {"lineHeight": "1.2", "letterSpacing": "0.04em", "fontWeight": "600"}],
+                      "headline-lg-mobile": ["32px", {"lineHeight": "1.2", "letterSpacing": "-0.01em", "fontWeight": "700"}],
+                      "body-md": ["16px", {"lineHeight": "1.5", "fontWeight": "400"}],
+                      "label-sm": ["12px", {"lineHeight": "1.2", "fontWeight": "500"}]
+              }
+            }
+          }
+        }
+    </script>
+<style>
+        body { font-family: 'Manrope', sans-serif; }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-surface text-on-surface min-h-screen flex flex-col font-body-md antialiased selection:bg-primary-container selection:text-on-primary-container">
+<!-- TopAppBar -->
+<header class="bg-surface dark:bg-surface w-full top-0 sticky border-b border-outline-variant dark:border-outline-variant flex justify-between items-center px-margin-mobile md:px-margin-desktop py-base z-40">
+<button class="text-primary dark:text-primary-fixed-dim hover:bg-surface-container-high dark:hover:bg-surface-container-high transition-colors active:scale-95 transition-transform p-2 rounded-full flex items-center justify-center">
+<span class="material-symbols-outlined">eco</span>
+</button>
+<h1 class="font-headline-md text-headline-md font-bold text-primary dark:text-primary-fixed-dim tracking-tight">Solar Flora</h1>
+<button class="text-primary dark:text-primary-fixed-dim hover:bg-surface-container-high dark:hover:bg-surface-container-high transition-colors active:scale-95 transition-transform p-2 rounded-full flex items-center justify-center">
+<span class="material-symbols-outlined">settings</span>
+</button>
+</header>
+<!-- Main Content Canvas -->
+<main class="flex-grow px-margin-mobile md:px-margin-desktop py-lg max-w-3xl mx-auto w-full space-y-lg pb-32">
+<!-- Profile Section -->
+<section class="animate-fade-in-up">
+<div class="bg-surface-container-lowest rounded-xl border border-surface-variant p-md flex items-center space-x-md">
+<div class="relative w-16 h-16 rounded-full overflow-hidden border-2 border-surface-container flex-shrink-0">
+<img class="w-full h-full object-cover" data-alt="A portrait photography shot of a serene, softly lit indoor greenhouse setting. The focus is on a subtle, abstract representation of a profile picture, blending natural light green and light blue tones with soft white backgrounds, fitting a lush and airy minimal design aesthetic." src="https://lh3.googleusercontent.com/aida-public/AB6AXuCPRxeU9qQJDxAq8jYyQkgHxIYDgql8TckEoPY5s7ZxXXByuFuUa73GmV-oWebAOIeWQubKQiOdlYLBrInl9JW7EkTB8KZyEjCI9NWrmF_UKrVLJQeJf-NXL4dy1OcQ3XBfq8K7CJeaY5IYEG2HNUBhp00K9Vx9NiHAHE4c5ecEfTU9QPwGnIeKj_cw4-A2B7CU9B3pdUsEWM4zlEHlxYEiwHEvo1ebbGomYKybWJ0Rz0tqfqDIF15n"/>
+</div>
+<div>
+<h2 class="font-headline-md text-headline-md text-on-surface">Plant Caretaker</h2>
+<p class="font-body-md text-body-md text-on-surface-variant mt-xs">flora.user@gmail.com</p>
+</div>
+</div>
+</section>
+<!-- System Configuration -->
+<section class="space-y-sm">
+<h3 class="font-label-md text-label-md text-primary tracking-wider uppercase ml-sm">System Configuration</h3>
+<div class="bg-surface-container-lowest rounded-xl border border-surface-variant overflow-hidden">
+<div class="flex items-center justify-between p-md hover:bg-surface-container transition-colors cursor-pointer active:bg-surface-container-high">
+<div class="flex items-center space-x-sm text-on-surface">
+<span class="material-symbols-outlined text-outline">potted_plant</span>
+<span class="font-body-md text-body-md">Number of Plants</span>
+</div>
+<div class="flex items-center space-x-sm">
+<span class="font-body-md text-body-md text-on-surface-variant">3</span>
+<span class="material-symbols-outlined text-outline text-sm">chevron_right</span>
+</div>
+</div>
+</div>
+</section>
+<!-- App Preferences -->
+<section class="space-y-sm">
+<h3 class="font-label-md text-label-md text-primary tracking-wider uppercase ml-sm">App Preferences</h3>
+<div class="bg-surface-container-lowest rounded-xl border border-surface-variant overflow-hidden flex flex-col">
+<!-- Dark Mode Toggle -->
+<div class="flex items-center justify-between p-md border-b border-surface-variant">
+<div class="flex items-center space-x-sm text-on-surface">
+<span class="material-symbols-outlined text-outline">dark_mode</span>
+<span class="font-body-md text-body-md">Dark Mode</span>
+</div>
+<button class="w-12 h-6 rounded-full bg-surface-container-highest relative transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 focus:ring-offset-surface">
+<div class="w-4 h-4 rounded-full bg-outline absolute top-1 left-1 transition-transform duration-200 shadow-sm"></div>
+</button>
+</div>
+<!-- Notifications Toggle -->
+<div class="flex items-center justify-between p-md border-b border-surface-variant">
+<div class="flex items-center space-x-sm text-on-surface">
+<span class="material-symbols-outlined text-outline">notifications</span>
+<span class="font-body-md text-body-md">Notifications</span>
+</div>
+<button class="w-12 h-6 rounded-full bg-primary relative transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 focus:ring-offset-surface">
+<div class="w-4 h-4 rounded-full bg-on-primary absolute top-1 left-1 transform translate-x-6 transition-transform duration-200 shadow-sm"></div>
+</button>
+</div>
+<!-- Language Selector -->
+<div class="flex items-center justify-between p-md hover:bg-surface-container transition-colors cursor-pointer active:bg-surface-container-high">
+<div class="flex items-center space-x-sm text-on-surface">
+<span class="material-symbols-outlined text-outline">language</span>
+<span class="font-body-md text-body-md">Language</span>
+</div>
+<div class="flex items-center space-x-sm">
+<span class="font-body-md text-body-md text-on-surface-variant">English</span>
+<span class="material-symbols-outlined text-outline text-sm">chevron_right</span>
+</div>
+</div>
+</div>
+</section>
+<!-- Log Out Action -->
+<section class="pt-sm">
+<button class="w-full py-md rounded-xl border border-error text-error font-label-md text-label-md bg-transparent hover:bg-error-container hover:text-on-error-container transition-colors duration-200 active:scale-95 flex items-center justify-center space-x-sm">
+<span class="material-symbols-outlined">logout</span>
+<span>Log Out</span>
+</button>
+</section>
+</main>
+<!-- BottomNavBar -->
+<nav class="bg-surface-container-low dark:bg-surface-container-low fixed bottom-0 w-full z-50 rounded-t-xl bg-surface-container-low dark:bg-surface-container-low fixed bottom-0 left-0 w-full z-50 flex justify-around items-center py-sm px-base pb-safe md:hidden">
+<!-- Status Tab (Inactive) -->
+<a class="flex flex-col items-center justify-center text-on-surface-variant dark:text-on-surface-variant px-4 py-1 hover:bg-surface-variant dark:hover:bg-surface-variant active:scale-95 transition-all duration-200 rounded-full group" href="#">
+<span class="material-symbols-outlined mb-1 group-hover:text-primary transition-colors">monitoring</span>
+<span class="font-label-sm text-label-sm">Status</span>
+</a>
+<!-- Energy Tab (Inactive) -->
+<a class="flex flex-col items-center justify-center text-on-surface-variant dark:text-on-surface-variant px-4 py-1 hover:bg-surface-variant dark:hover:bg-surface-variant active:scale-95 transition-all duration-200 rounded-full group" href="#">
+<span class="material-symbols-outlined mb-1 group-hover:text-primary transition-colors">solar_power</span>
+<span class="font-label-sm text-label-sm">Energy</span>
+</a>
+<!-- Settings Tab (Active) -->
+<a class="flex flex-col items-center justify-center bg-primary-container dark:bg-on-primary-fixed-variant text-on-primary-container dark:text-primary-fixed rounded-full px-4 py-1 hover:bg-surface-variant dark:hover:bg-surface-variant active:scale-95 transition-all duration-200" href="#">
+<span class="material-symbols-outlined mb-1" style="font-variation-settings: 'FILL' 1;">settings</span>
+<span class="font-label-sm text-label-sm">Settings</span>
+</a>
+</nav>
+<!-- Desktop Side Nav Spacer (Visual alignment for larger screens if implemented later) -->
+<div class="hidden md:block h-20"></div>
+</body></html>

@@ -1,0 +1,426 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Energy - Solar Flora</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+          darkMode: "class",
+          theme: {
+            extend: {
+              "colors": {
+                      "secondary": "#4f6074",
+                      "secondary-fixed-dim": "#b7c8df",
+                      "tertiary-fixed-dim": "#c5c7c2",
+                      "on-secondary": "#ffffff",
+                      "on-error": "#ffffff",
+                      "primary-container": "#d1e7dd",
+                      "inverse-on-surface": "#e8f4e9",
+                      "error-container": "#ffdad6",
+                      "surface-variant": "#dae6db",
+                      "outline-variant": "#c2c8c4",
+                      "on-primary-fixed-variant": "#374b44",
+                      "surface-container-lowest": "#ffffff",
+                      "secondary-container": "#d0e1f9",
+                      "tertiary-container": "#e1e3dd",
+                      "on-surface-variant": "#424845",
+                      "surface-container-high": "#dfebe0",
+                      "primary": "#4f635b",
+                      "on-tertiary-fixed-variant": "#444844",
+                      "on-error-container": "#93000a",
+                      "tertiary-fixed": "#e1e3dd",
+                      "primary-fixed": "#d1e7dd",
+                      "on-primary-container": "#546860",
+                      "on-secondary-container": "#546478",
+                      "tertiary": "#5c5f5b",
+                      "outline": "#727875",
+                      "on-secondary-fixed-variant": "#38485b",
+                      "surface-container-highest": "#dae6db",
+                      "surface-dim": "#d1ddd3",
+                      "on-surface": "#141e17",
+                      "on-primary": "#ffffff",
+                      "surface-container-low": "#ebf7ec",
+                      "surface-tint": "#4f635b",
+                      "inverse-surface": "#28332c",
+                      "on-tertiary-fixed": "#191c19",
+                      "on-secondary-fixed": "#0b1d2e",
+                      "background": "#f1fcf1",
+                      "on-tertiary": "#ffffff",
+                      "surface": "#f1fcf1",
+                      "error": "#ba1a1a",
+                      "on-primary-fixed": "#0c1f19",
+                      "inverse-primary": "#b6cbc2",
+                      "surface-bright": "#f1fcf1",
+                      "on-background": "#141e17",
+                      "secondary-fixed": "#d3e4fc",
+                      "primary-fixed-dim": "#b6cbc2",
+                      "on-tertiary-container": "#626561",
+                      "surface-container": "#e5f1e6"
+              },
+              "borderRadius": {
+                      "DEFAULT": "0.25rem",
+                      "lg": "0.5rem",
+                      "xl": "0.75rem",
+                      "full": "9999px"
+              },
+              "spacing": {
+                      "gutter": "20px",
+                      "base": "8px",
+                      "xl": "80px",
+                      "margin-desktop": "64px",
+                      "xs": "4px",
+                      "margin-mobile": "20px",
+                      "sm": "12px",
+                      "md": "24px",
+                      "lg": "48px"
+              },
+              "fontFamily": {
+                      "body-lg": [
+                              "Manrope"
+                      ],
+                      "headline-lg-mobile": [
+                              "Manrope"
+                      ],
+                      "body-md": [
+                              "Manrope"
+                      ],
+                      "headline-lg": [
+                              "Manrope"
+                      ],
+                      "label-sm": [
+                              "Manrope"
+                      ],
+                      "label-md": [
+                              "Manrope"
+                      ],
+                      "headline-md": [
+                              "Manrope"
+                      ]
+              },
+              "fontSize": {
+                      "body-lg": [
+                              "18px",
+                              {
+                                      "lineHeight": "1.6",
+                                      "fontWeight": "400"
+                              }
+                      ],
+                      "headline-lg-mobile": [
+                              "32px",
+                              {
+                                      "lineHeight": "1.2",
+                                      "letterSpacing": "-0.01em",
+                                      "fontWeight": "700"
+                              }
+                      ],
+                      "body-md": [
+                              "16px",
+                              {
+                                      "lineHeight": "1.5",
+                                      "fontWeight": "400"
+                              }
+                      ],
+                      "headline-lg": [
+                              "40px",
+                              {
+                                      "lineHeight": "1.2",
+                                      "letterSpacing": "-0.02em",
+                                      "fontWeight": "700"
+                              }
+                      ],
+                      "label-sm": [
+                              "12px",
+                              {
+                                      "lineHeight": "1.2",
+                                      "fontWeight": "500"
+                              }
+                      ],
+                      "label-md": [
+                              "14px",
+                              {
+                                      "lineHeight": "1.2",
+                                      "letterSpacing": "0.04em",
+                                      "fontWeight": "600"
+                              }
+                      ],
+                      "headline-md": [
+                              "24px",
+                              {
+                                      "lineHeight": "1.3",
+                                      "fontWeight": "600"
+                              }
+                      ]
+              }
+      },
+          },
+        }
+      </script>
+<style>
+        .glass-card {
+            background: rgba(255, 255, 255, 0.7);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.5);
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03);
+        }
+
+        .fade-in-up {
+            animation: fadeInUp 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+            opacity: 0;
+            transform: translateY(20px);
+        }
+
+        .delay-100 { animation-delay: 100ms; }
+        .delay-200 { animation-delay: 200ms; }
+        .delay-300 { animation-delay: 300ms; }
+
+        @keyframes fadeInUp {
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+        
+        .pulse-ring {
+            animation: pulseRing 3s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+        }
+
+        @keyframes pulseRing {
+            0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(79, 99, 91, 0.3); }
+            70% { transform: scale(1); box-shadow: 0 0 0 15px rgba(79, 99, 91, 0); }
+            100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(79, 99, 91, 0); }
+        }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+</head>
+<body class="bg-surface text-on-surface font-body-md overflow-x-hidden min-h-screen relative pb-24 md:pb-0 pt-16 md:pt-20">
+<!-- WebGL Background -->
+<div class="fixed inset-0 z-[-1] opacity-60">
+<!-- STITCH_SHADER_START:ANIMATION_25 class="absolute inset-0 w-full h-full" -->
+<div class="absolute inset-0 w-full h-full" style="display:block;">
+<canvas id="shader-canvas-ANIMATION_25" style="display:block;width:100%;height:100%"></canvas>
+<script>
+(function() {
+  const canvas = document.getElementById('shader-canvas-ANIMATION_25');
+
+  // Sync the WebGL drawing-buffer size with the CSS-driven layout size.
+  // This fires on initial layout and whenever the element is resized.
+  function syncSize() {
+    const w = canvas.clientWidth  || 1280;
+    const h = canvas.clientHeight || 720;
+    if (canvas.width !== w || canvas.height !== h) {
+      canvas.width  = w;
+      canvas.height = h;
+    }
+  }
+  if (typeof ResizeObserver !== 'undefined') {
+    new ResizeObserver(syncSize).observe(canvas);
+  }
+  syncSize();
+
+  const gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
+  if (!gl) return;
+  const vs = `attribute vec2 a_position;
+varying vec2 v_texCoord;
+void main() {
+  v_texCoord = a_position * 0.5 + 0.5;
+  gl_Position = vec4(a_position, 0.0, 1.0);
+}`;
+  const fs = `precision highp float;
+varying vec2 v_texCoord;
+uniform float u_time;
+uniform vec2 u_resolution;
+uniform vec2 u_mouse;
+uniform float u_charging; // 1.0 for charging, 0.0 for discharging
+
+void main() {
+    vec2 uv = v_texCoord;
+    vec2 center = vec2(0.5, 0.5);
+    
+    // Background soft gradient
+    vec3 color_bg = vec3(0.945, 0.988, 0.945); // #f1fcf1
+    vec3 color_accent = u_charging > 0.5 ? vec3(0.702, 0.851, 1.0) : vec3(0.82, 0.906, 0.867); // light blue vs primary green
+    
+    float dist = distance(uv, center);
+    float glow = smoothstep(0.8, 0.2, dist);
+    
+    vec3 color = mix(color_bg, color_accent, glow * 0.15);
+    
+    // Animated particles/current flow
+    float angle = atan(uv.y - center.y, uv.x - center.x);
+    float flow = sin(angle * 10.0 + u_time * (u_charging > 0.5 ? -2.0 : 2.0));
+    float rings = sin(dist * 20.0 - u_time * (u_charging > 0.5 ? 3.0 : -1.5));
+    
+    float intensity = smoothstep(0.4, 0.41, dist) * smoothstep(0.42, 0.41, dist);
+    color += color_accent * intensity * (flow * 0.5 + 0.5) * 0.3;
+    
+    // Ambient pulse
+    color += color_accent * (sin(u_time) * 0.05 + 0.05) * glow;
+
+    gl_FragColor = vec4(color, 1.0);
+}`;
+  function cs(type, src) {
+    const s = gl.createShader(type);
+    gl.shaderSource(s, src);
+    gl.compileShader(s);
+    return s;
+  }
+  const prog = gl.createProgram();
+  gl.attachShader(prog, cs(gl.VERTEX_SHADER, vs));
+  gl.attachShader(prog, cs(gl.FRAGMENT_SHADER, fs));
+  gl.linkProgram(prog);
+  gl.useProgram(prog);
+  const buf = gl.createBuffer();
+  gl.bindBuffer(gl.ARRAY_BUFFER, buf);
+  gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1,-1, 1,-1, -1,1, 1,1]), gl.STATIC_DRAW);
+  const pos = gl.getAttribLocation(prog, 'a_position');
+  gl.enableVertexAttribArray(pos);
+  gl.vertexAttribPointer(pos, 2, gl.FLOAT, false, 0, 0);
+  const uTime = gl.getUniformLocation(prog, 'u_time');
+  const uRes = gl.getUniformLocation(prog, 'u_resolution');
+  const uMouse = gl.getUniformLocation(prog, 'u_mouse');
+
+  // u_mouse is in pixel coordinates matching u_resolution (ShaderToy convention).
+  // Shaders that need normalized coords should use: u_mouse / u_resolution.
+  let mouse = { x: canvas.width / 2, y: canvas.height / 2 };
+  window.addEventListener('mousemove', (event) => {
+    const rect = canvas.getBoundingClientRect();
+    if (rect.width && rect.height) {
+      const nx = (event.clientX - rect.left) / rect.width;
+      const ny = 1.0 - (event.clientY - rect.top) / rect.height;
+      mouse.x = nx * canvas.width;
+      mouse.y = ny * canvas.height;
+    }
+  });
+
+  function render(t) {
+    if (typeof ResizeObserver === 'undefined') syncSize();
+    gl.viewport(0, 0, canvas.width, canvas.height);
+    if (uTime) gl.uniform1f(uTime, t * 0.001);
+    if (uRes) gl.uniform2f(uRes, canvas.width, canvas.height);
+    if (uMouse) gl.uniform2f(uMouse, mouse.x, mouse.y);
+    gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+    requestAnimationFrame(render);
+  }
+  render(0);
+})();
+</script>
+</div>
+<!-- STITCH_SHADER_END:ANIMATION_25 -->
+</div>
+<!-- TopAppBar -->
+<header class="w-full top-0 sticky z-40 bg-surface border-b border-outline-variant flex justify-between items-center px-margin-mobile md:px-margin-desktop py-base">
+<button class="p-2 text-primary hover:bg-surface-container-high rounded-full transition-colors active:scale-95 flex items-center justify-center">
+<span class="material-symbols-outlined text-[24px]">eco</span>
+</button>
+<h1 class="font-headline-md text-headline-md font-bold text-primary">Solar Flora</h1>
+<button class="p-2 text-primary hover:bg-surface-container-high rounded-full transition-colors active:scale-95 flex items-center justify-center">
+<span class="material-symbols-outlined text-[24px]">settings</span>
+</button>
+</header>
+<main class="max-w-4xl mx-auto px-margin-mobile md:px-margin-desktop pt-md pb-xl">
+<!-- Top Section: Battery Status -->
+<section class="flex flex-col items-center justify-center py-lg fade-in-up">
+<div class="relative flex items-center justify-center w-48 h-48 rounded-full glass-card pulse-ring mb-md">
+<div class="text-center">
+<span class="block font-headline-lg-mobile md:font-headline-lg text-headline-lg-mobile md:text-headline-lg text-primary">82%</span>
+<span class="block font-label-md text-label-md text-primary mt-xs">Charging</span>
+</div>
+</div>
+<p class="font-body-md text-body-md text-on-surface-variant text-center max-w-sm">
+                Sufficient energy stored. System operating optimally on solar input.
+            </p>
+</section>
+<!-- Center Section: Power Flow -->
+<section class="py-md fade-in-up delay-100 flex items-center justify-center gap-md md:gap-lg">
+<div class="flex flex-col items-center">
+<div class="w-16 h-16 rounded-full bg-surface-container-high flex items-center justify-center text-primary mb-sm shadow-sm">
+<span class="material-symbols-outlined text-[32px]">solar_power</span>
+</div>
+<span class="font-label-sm text-label-sm text-on-surface-variant uppercase tracking-wider">Panel</span>
+</div>
+<!-- Flow Animation Container -->
+<div class="flex-1 max-w-[100px] h-1 bg-surface-variant rounded-full relative overflow-hidden">
+<div class="absolute top-0 left-0 h-full bg-primary w-1/2 rounded-full animate-[slideRight_2s_linear_infinite]"></div>
+</div>
+<div class="flex flex-col items-center">
+<div class="w-16 h-16 rounded-full bg-surface-container-high flex items-center justify-center text-primary mb-sm shadow-sm">
+<span class="material-symbols-outlined text-[32px]" style="font-variation-settings: 'FILL' 1;">battery_charging_full</span>
+</div>
+<span class="font-label-sm text-label-sm text-on-surface-variant uppercase tracking-wider">Battery</span>
+</div>
+</section>
+<style>
+            @keyframes slideRight {
+                0% { transform: translateX(-100%); }
+                100% { transform: translateX(200%); }
+            }
+        </style>
+<!-- Real-time Data Cards -->
+<section class="grid grid-cols-2 gap-sm md:gap-md py-md fade-in-up delay-200">
+<div class="glass-card rounded-xl p-md flex flex-col items-start border border-outline-variant/30">
+<div class="flex items-center gap-xs mb-sm text-primary">
+<span class="material-symbols-outlined text-[20px]">wb_sunny</span>
+<span class="font-label-md text-label-md">Solar Input</span>
+</div>
+<div class="flex items-baseline gap-xs">
+<span class="font-headline-md text-headline-md text-on-surface">34</span>
+<span class="font-body-md text-body-md text-on-surface-variant">W</span>
+</div>
+</div>
+<div class="glass-card rounded-xl p-md flex flex-col items-start border border-outline-variant/30">
+<div class="flex items-center gap-xs mb-sm text-secondary">
+<span class="material-symbols-outlined text-[20px]">bolt</span>
+<span class="font-label-md text-label-md">System Load</span>
+</div>
+<div class="flex items-baseline gap-xs">
+<span class="font-headline-md text-headline-md text-on-surface">12</span>
+<span class="font-body-md text-body-md text-on-surface-variant">W</span>
+</div>
+</div>
+</section>
+<!-- Bottom Section: Info Details -->
+<section class="py-md fade-in-up delay-300">
+<div class="glass-card rounded-xl p-md flex flex-col gap-md border border-outline-variant/30">
+<div class="flex justify-between items-center border-b border-surface-variant pb-sm">
+<div class="flex items-center gap-sm">
+<span class="material-symbols-outlined text-primary text-[20px]">favorite</span>
+<span class="font-label-md text-label-md text-on-surface">Battery Health</span>
+</div>
+<span class="font-body-md text-body-md text-primary font-medium">Excellent (98%)</span>
+</div>
+<div class="flex justify-between items-center">
+<div class="flex items-center gap-sm">
+<span class="material-symbols-outlined text-primary text-[20px]">hourglass_empty</span>
+<span class="font-label-md text-label-md text-on-surface">Est. Time to Full</span>
+</div>
+<span class="font-body-md text-body-md text-on-surface-variant">2h 15m</span>
+</div>
+</div>
+</section>
+</main>
+<!-- BottomNavBar (Mobile Only) -->
+<nav class="md:hidden fixed bottom-0 left-0 w-full z-50 flex justify-around items-center py-sm px-base pb-safe bg-surface-container-low rounded-t-xl">
+<button class="flex flex-col items-center justify-center text-on-surface-variant px-4 py-1 hover:bg-surface-variant active:scale-95 transition-all duration-200">
+<span class="material-symbols-outlined text-[24px]">monitoring</span>
+<span class="font-label-sm text-label-sm mt-xs">Status</span>
+</button>
+<button class="flex flex-col items-center justify-center bg-primary-container text-on-primary-container rounded-full px-4 py-1 hover:bg-surface-variant active:scale-95 transition-all duration-200">
+<span class="material-symbols-outlined text-[24px]" style="font-variation-settings: 'FILL' 1;">solar_power</span>
+<span class="font-label-sm text-label-sm mt-xs">Energy</span>
+</button>
+<button class="flex flex-col items-center justify-center text-on-surface-variant px-4 py-1 hover:bg-surface-variant active:scale-95 transition-all duration-200">
+<span class="material-symbols-outlined text-[24px]">settings</span>
+<span class="font-label-sm text-label-sm mt-xs">Settings</span>
+</button>
+</nav>
+</body></html>

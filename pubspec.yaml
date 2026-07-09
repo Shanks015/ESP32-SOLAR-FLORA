@@ -1,0 +1,26 @@
+name: solar_flora_app
+description: A smart, solar-powered plant watering app
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: '>=2.19.0 <3.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+  supabase_flutter: ^2.0.0
+  google_sign_in: ^6.0.0
+  image_picker: ^0.8.0+0
+  google_fonts: ^8.1.0
+  flutter_dotenv: ^6.0.1
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^2.0.0
+
+flutter:
+  uses-material-design: true
+  assets:
+    - .env
