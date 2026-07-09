@@ -28,7 +28,7 @@ jobs:
     - name: Get Dependencies
       run: flutter pub get
 
-    # Create dummy .env file so compilation doesn't crash on asset asset load
+    # Create dummy .env file so compilation doesn't crash on asset load
     - name: Create dummy .env
       run: |
         echo "SUPABASE_URL=https://dummy-url.supabase.co" > .env
@@ -36,3 +36,17 @@ jobs:
 
     - name: Build iOS (No Codesign)
       run: flutter build ios --no-codesign
+
+    # Pack the .app folder into a standard iOS .ipa package
+    - name: Package IPA
+      run: |
+        mkdir -p Payload
+        mv build/ios/iphoneos/Runner.app Payload/
+        zip -r Runner.ipa Payload
+
+    # Upload the .ipa file as a downloadable build artifact
+    - name: Upload Artifact
+      uses: actions/upload-artifact@v3
+      with:
+        name: SolarFlora-iOS-Build
+        path: Runner.ipa
