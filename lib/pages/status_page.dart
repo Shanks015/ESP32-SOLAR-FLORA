@@ -42,6 +42,7 @@ class _StatusPageState extends State<StatusPage> with TickerProviderStateMixin {
   // Device connectivity states
   bool _isDeviceOnline = false;
   String _lastSeenText = 'Never';
+  int _sleepInterval = 600; // Sleep interval in seconds (default 10 minutes)
 
   // Daily watering schedule states
   bool _dailyWateringEnabled = false;
@@ -100,8 +101,9 @@ class _StatusPageState extends State<StatusPage> with TickerProviderStateMixin {
               final now = DateTime.now();
               final diff = now.difference(lastSeen);
               
-              // Device sleeps for 10 minutes (600s). We allow a 12-minute margin
-              _isDeviceOnline = diff.inMinutes <= 12;
+              // Consider offline if no telemetry is received for 2 wake cycles + 10s margin
+              final int offlineThreshold = (_sleepInterval * 2) + 10;
+              _isDeviceOnline = diff.inSeconds <= offlineThreshold;
               
               if (diff.inSeconds < 60) {
                 _lastSeenText = 'Just now';
@@ -128,6 +130,7 @@ class _StatusPageState extends State<StatusPage> with TickerProviderStateMixin {
         if (profile != null && mounted) {
           setState(() {
             _wateringDuration = profile['watering_duration'] ?? 15;
+            _sleepInterval = profile['sleep_interval'] ?? 600;
             _dailyWateringEnabled = profile['daily_watering_enabled'] ?? false;
             _dailyWateringTime = profile['daily_watering_time'] ?? '08:00:00';
 
@@ -299,6 +302,22 @@ class _StatusPageState extends State<StatusPage> with TickerProviderStateMixin {
       }
     } catch (e) {
       print('Error saving run duration: $e');
+    }
+  }
+
+  Future<void> _updateSleepInterval(int seconds) async {
+    setState(() {
+      _sleepInterval = seconds;
+    });
+    try {
+      final userId = _supabaseService.getCurrentUser()?.id;
+      if (userId != null) {
+        await _supabaseService.updateProfile({
+          'sleep_interval': seconds,
+        });
+      }
+    } catch (e) {
+      print('Error saving sleep interval: $e');
     }
   }
 
@@ -677,6 +696,41 @@ class _StatusPageState extends State<StatusPage> with TickerProviderStateMixin {
                                         onChanged: _isDeviceOnline ? (val) {
                                           if (val != null) {
                                             _updateWateringDuration(val);
+                                          }
+                                        } : null,
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 12),
+                                  Row(
+                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                    children: [
+                                      Text(
+                                        'Device Wakeup Interval:',
+                                        style: GoogleFonts.manrope(
+                                          fontSize: 14,
+                                          fontWeight: FontWeight.w600,
+                                          color: textMain,
+                                        ),
+                                      ),
+                                      DropdownButton<int>(
+                                        value: _sleepInterval,
+                                        dropdownColor: isDark ? const Color(0xFF16221A) : Colors.white,
+                                        style: GoogleFonts.manrope(
+                                          color: textMain,
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                        underline: Container(),
+                                        items: const [
+                                          DropdownMenuItem(value: 15, child: Text('15s (Test)')),
+                                          DropdownMenuItem(value: 60, child: Text('1m')),
+                                          DropdownMenuItem(value: 300, child: Text('5m')),
+                                          DropdownMenuItem(value: 600, child: Text('10m')),
+                                          DropdownMenuItem(value: 1800, child: Text('30m')),
+                                        ],
+                                        onChanged: _isDeviceOnline ? (val) {
+                                          if (val != null) {
+                                            _updateSleepInterval(val);
                                           }
                                         } : null,
                                       ),

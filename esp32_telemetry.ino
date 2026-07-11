@@ -16,7 +16,7 @@ const int motorRelayPin = 4; // Assuming GPIO 4 for your water pump relay
 
 // --- Deep Sleep Config ---
 #define uS_TO_S_FACTOR 1000000ULL  /* Conversion factor for micro seconds to seconds */
-#define TIME_TO_SLEEP  600        /* Time ESP32 will sleep (in seconds) - 10 minutes */
+int sleepInterval = 600;           /* Default sleep time in seconds - 10 minutes */
 
 // --- NTP Time Setup ---
 const long gmtOffset_sec = 19800;  // Adjust to your local timezone (e.g. India GMT+5:30 is 19800)
@@ -58,10 +58,10 @@ void setup() {
 
   // 5. Enter Deep Sleep (WiFi and CPU turn off completely)
   Serial.print("Entering Deep Sleep for ");
-  Serial.print(TIME_TO_SLEEP / 60);
-  Serial.println(" minutes. Goodnight!");
+  Serial.print(sleepInterval);
+  Serial.println(" seconds. Goodnight!");
   
-  esp_sleep_enable_timer_wakeup(TIME_TO_SLEEP * uS_TO_S_FACTOR);
+  esp_sleep_enable_timer_wakeup(sleepInterval * uS_TO_S_FACTOR);
   esp_deep_sleep_start();
 }
 
@@ -96,7 +96,7 @@ void processWateringLogic() {
   HTTPClient http;
   
   // Fetch columns needed for schedules and controls
-  String url = String(supabaseUrl) + "/rest/v1/profiles?select=motor_active,daily_watering_enabled,daily_watering_time,watering_duration&id=eq." + String(userId);
+  String url = String(supabaseUrl) + "/rest/v1/profiles?select=motor_active,daily_watering_enabled,daily_watering_time,watering_duration,sleep_interval&id=eq." + String(userId);
   http.begin(url);
   
   http.addHeader("apikey", supabaseKey);
@@ -124,6 +124,7 @@ void processWateringLogic() {
       bool dailyEnabled = doc[0]["daily_watering_enabled"] | false;
       String dailyTime = doc[0]["daily_watering_time"] | "08:00:00";
       int duration = doc[0]["watering_duration"] | 15;
+      sleepInterval = doc[0]["sleep_interval"] | 600; // Parse the dynamically configured sleep interval
 
       bool triggerWatering = false;
 
