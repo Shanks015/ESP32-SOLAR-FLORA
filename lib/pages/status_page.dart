@@ -39,12 +39,20 @@ class _StatusPageState extends State<StatusPage> with TickerProviderStateMixin {
   bool _isCharging = true;
   Timer? _telemetryTimer;
 
+  // Device connectivity states
+  bool _isDeviceOnline = false;
+  String _lastSeenText = 'Never';
+
+  // Daily watering schedule states
+  bool _dailyWateringEnabled = false;
+  String _dailyWateringTime = '08:00:00';
+
   @override
   void initState() {
     super.initState();
 
     _pulseController = AnimationController(
-      duration: const Duration(seconds: 2),
+      duration: const Duration(milliseconds: 1500),
       vsync: this,
     )..repeat(reverse: true);
 
@@ -85,17 +93,44 @@ class _StatusPageState extends State<StatusPage> with TickerProviderStateMixin {
           setState(() {
             _batteryPercentage = telemetry['battery_percentage'] ?? 85;
             _isCharging = telemetry['is_charging'] ?? true;
+
+            final lastSeenStr = telemetry['created_at'];
+            if (lastSeenStr != null) {
+              final lastSeen = DateTime.parse(lastSeenStr).toLocal();
+              final now = DateTime.now();
+              final diff = now.difference(lastSeen);
+              
+              // Device sleeps for 10 minutes (600s). We allow a 12-minute margin
+              _isDeviceOnline = diff.inMinutes <= 12;
+              
+              if (diff.inSeconds < 60) {
+                _lastSeenText = 'Just now';
+              } else if (diff.inMinutes < 60) {
+                _lastSeenText = '${diff.inMinutes}m ago';
+              } else if (diff.inHours < 24) {
+                _lastSeenText = '${diff.inHours}h ago';
+              } else {
+                _lastSeenText = '${diff.inDays}d ago';
+              }
+            } else {
+              _isDeviceOnline = false;
+              _lastSeenText = 'Never';
+            }
+
             if (!_isWatering && (telemetry['motor_active'] ?? false)) {
               _triggerLocalWateringUI();
             }
           });
         }
 
-        // Fetch profiles data for timer configs
+        // Fetch profiles data for configs and daily schedule
         final profile = await _supabaseService.getProfile(userId);
         if (profile != null && mounted) {
           setState(() {
             _wateringDuration = profile['watering_duration'] ?? 15;
+            _dailyWateringEnabled = profile['daily_watering_enabled'] ?? false;
+            _dailyWateringTime = profile['daily_watering_time'] ?? '08:00:00';
+
             final scheduledTimeStr = profile['scheduled_watering_time'];
             if (scheduledTimeStr != null) {
               final target = DateTime.parse(scheduledTimeStr);
@@ -267,6 +302,69 @@ class _StatusPageState extends State<StatusPage> with TickerProviderStateMixin {
     }
   }
 
+  // --- Daily Watering Schedule Functions ---
+
+  Future<void> _toggleDailyWatering(bool value) async {
+    setState(() {
+      _dailyWateringEnabled = value;
+    });
+    try {
+      final userId = _supabaseService.getCurrentUser()?.id;
+      if (userId != null) {
+        await _supabaseService.updateProfile({
+          'daily_watering_enabled': value,
+        });
+      }
+    } catch (e) {
+      print('Error toggling daily schedule: $e');
+    }
+  }
+
+  Future<void> _selectDailyWateringTime() async {
+    int initialHour = 8;
+    int initialMinute = 0;
+    try {
+      final parts = _dailyWateringTime.split(':');
+      initialHour = int.parse(parts[0]);
+      initialMinute = int.parse(parts[1]);
+    } catch (_) {}
+
+    final TimeOfDay? picked = await showTimePicker(
+      context: context,
+      initialTime: TimeOfDay(hour: initialHour, minute: initialMinute),
+    );
+
+    if (picked != null) {
+      final formattedTime = '${picked.hour.toString().padLeft(2, '0')}:${picked.minute.toString().padLeft(2, '0')}:00';
+      setState(() {
+        _dailyWateringTime = formattedTime;
+      });
+      try {
+        final userId = _supabaseService.getCurrentUser()?.id;
+        if (userId != null) {
+          await _supabaseService.updateProfile({
+            'daily_watering_time': formattedTime,
+          });
+        }
+      } catch (e) {
+        print('Error saving daily watering time: $e');
+      }
+    }
+  }
+
+  String _formatTimeString(String timeStr) {
+    try {
+      final parts = timeStr.split(':');
+      final hour = int.parse(parts[0]);
+      final minute = int.parse(parts[1]);
+      final ampm = hour >= 12 ? 'PM' : 'AM';
+      final displayHour = hour > 12 ? hour - 12 : (hour == 0 ? 12 : hour);
+      return '${displayHour.toString().padLeft(2, '0')}:${minute.toString().padLeft(2, '0')} $ampm';
+    } catch (_) {
+      return timeStr;
+    }
+  }
+
   String _formatDuration(Duration duration) {
     String twoDigits(int n) => n.toString().padLeft(2, '0');
     final minutes = twoDigits(duration.inMinutes.remainder(60));
@@ -283,20 +381,23 @@ class _StatusPageState extends State<StatusPage> with TickerProviderStateMixin {
   Widget _buildTimerOption(int minutes, String label) {
     final bool isDark = Theme.of(context).brightness == Brightness.dark;
     return InkWell(
-      onTap: () => _setDelayTimer(minutes),
+      onTap: _isDeviceOnline ? () => _setDelayTimer(minutes) : null,
       borderRadius: BorderRadius.circular(12),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-        decoration: BoxDecoration(
-          color: isDark ? const Color(0xFF1E3226) : const Color(0xFFDFEBE0),
-          borderRadius: BorderRadius.circular(12),
-        ),
-        child: Text(
-          label,
-          style: GoogleFonts.manrope(
-            fontSize: 13,
-            fontWeight: FontWeight.w700,
-            color: const Color(0xFF4F635B),
+      child: Opacity(
+        opacity: _isDeviceOnline ? 1.0 : 0.5,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+          decoration: BoxDecoration(
+            color: isDark ? const Color(0xFF1E3226) : const Color(0xFFDFEBE0),
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Text(
+            label,
+            style: GoogleFonts.manrope(
+              fontSize: 13,
+              fontWeight: FontWeight.w700,
+              color: const Color(0xFF4F635B),
+            ),
           ),
         ),
       ),
@@ -306,15 +407,15 @@ class _StatusPageState extends State<StatusPage> with TickerProviderStateMixin {
   @override
   Widget build(BuildContext context) {
     final bool isDark = Theme.of(context).brightness == Brightness.dark;
-    
     final Color scaffoldBg = isDark ? const Color(0xFF0F1813) : const Color(0xFFF1FCF1);
-    final Color cardColor = isDark ? const Color(0xFF16221A) : Colors.white.withOpacity(0.7);
-    final Color borderColor = isDark ? const Color(0xFF2A3D31) : Colors.white.withOpacity(0.5);
+    final Color cardColor = isDark ? const Color(0xFF16221A) : Colors.white;
+    final Color borderColor = isDark ? const Color(0xFF2A3D31) : const Color(0xFFDAE6DB);
     final Color textMain = isDark ? const Color(0xFFE0EAE1) : const Color(0xFF141E17);
     final Color textSecondary = isDark ? const Color(0xFF8B9B90) : const Color(0xFF424845);
-    
-    final Color primaryColor = const Color(0xFF4F635B);
-    final Color flowLineColor = isDark ? const Color(0xFF7AA58B) : const Color(0xFF4F635B);
+    final Color primaryColor = isDark ? const Color(0xFFB6CBC2) : const Color(0xFF4F635B);
+    final Color flowLineColor = _isCharging 
+        ? const Color(0xFF41B883) 
+        : (isDark ? const Color(0xFF8B9B90) : const Color(0xFF4F635B));
 
     return Scaffold(
       backgroundColor: scaffoldBg,
@@ -333,7 +434,64 @@ class _StatusPageState extends State<StatusPage> with TickerProviderStateMixin {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.center,
                         children: [
-                          const SizedBox(height: 24),
+                          const SizedBox(height: 12),
+                          
+                          // Connection Status badge
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Container(
+                                width: 8,
+                                height: 8,
+                                decoration: BoxDecoration(
+                                  shape: BoxShape.circle,
+                                  color: _isDeviceOnline ? const Color(0xFF41B883) : Colors.grey,
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              Text(
+                                _isDeviceOnline
+                                    ? 'Device Online'
+                                    : 'Device Offline (Last seen: $_lastSeenText)',
+                                style: GoogleFonts.manrope(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600,
+                                  color: _isDeviceOnline ? const Color(0xFF41B883) : textSecondary,
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 16),
+
+                          // Offline Banner Alert
+                          if (!_isDeviceOnline) ...[
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFFFDAD6),
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(color: const Color(0xFFFFB4AB)),
+                              ),
+                              child: Row(
+                                children: [
+                                  const Icon(Icons.warning_amber_rounded, color: Color(0xFF410002)),
+                                  const SizedBox(width: 12),
+                                  Expanded(
+                                    child: Text(
+                                      'Device is offline. Controls are disabled until the device wakes up and reconnects.',
+                                      style: GoogleFonts.manrope(
+                                        fontSize: 12,
+                                        color: const Color(0xFF410002),
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(height: 16),
+                          ],
+
                           // Hero succulent card
                           Center(
                             child: Container(
@@ -352,31 +510,27 @@ class _StatusPageState extends State<StatusPage> with TickerProviderStateMixin {
                                 ],
                               ),
                               child: Stack(
-                                alignment: Alignment.center,
                                 children: [
-                                  // Succulent Image
-                                  Image.network(
-                                    'https://lh3.googleusercontent.com/aida/AP1WRLtDT9qJGUFJX8hoSga06y9T98JkOMMpzbcJL-p-41LuuLdzJ3pZOSpe5HjVpuAlZm58HLWyXTyTbsRR0qnwnTuJmDrIr9Vk-WYRHSAaOechtx8Wjk8GCFpm8vFAKkSNF5Zv6pAS9pXQY3PQESYWhKofvYvs84dVysNFUQNNV-sFRcbeVSLaE2PN5YtQRSCJBEuCRIzv4R4f2doSlyWpC9QxWXbR1pyvo0EWZsvUGgvHzMgex4ytRP4tqg0',
-                                    width: 170,
-                                    height: 170,
-                                    fit: BoxFit.contain,
-                                    errorBuilder: (context, error, stackTrace) =>
-                                        Icon(Icons.spa, size: 70, color: primaryColor),
-                                  ),
-
-                                  // Watering Overlay State
-                                  if (_isWatering)
-                                    Container(
-                                      decoration: BoxDecoration(
-                                        shape: BoxShape.circle,
-                                        color: (isDark ? const Color(0xFF0F1813) : const Color(0xFFF1FCF1)).withOpacity(0.5),
+                                  Center(
+                                    child: ClipOval(
+                                      child: Image.network(
+                                        'https://images.unsplash.com/photo-1509440159596-0249088772ff?q=80&w=300&auto=format&fit=crop',
+                                        width: 220,
+                                        height: 220,
+                                        fit: BoxFit.cover,
                                       ),
-                                      child: ClipRRect(
-                                        borderRadius: BorderRadius.circular(120),
-                                        child: BackdropFilter(
-                                          filter: ColorFilter.mode(
-                                            Colors.white.withOpacity(0.1),
-                                            BlendMode.srcOver,
+                                    ),
+                                  ),
+                                  // Watering Overlay
+                                  if (_isWatering)
+                                    Positioned.fill(
+                                      child: AnimatedOpacity(
+                                        duration: const Duration(milliseconds: 300),
+                                        opacity: _isWatering ? 1.0 : 0.0,
+                                        child: Container(
+                                          decoration: BoxDecoration(
+                                            shape: BoxShape.circle,
+                                            color: const Color(0xFF4F6074).withOpacity(0.85),
                                           ),
                                           child: Center(
                                             child: Column(
@@ -423,10 +577,12 @@ class _StatusPageState extends State<StatusPage> with TickerProviderStateMixin {
 
                           // Water Button
                           ElevatedButton.icon(
-                            onPressed: _isWatering ? null : _startWatering,
+                            onPressed: (_isWatering || !_isDeviceOnline) ? null : _startWatering,
                             icon: const Icon(Icons.water_drop, size: 18),
                             label: Text(
-                              _isWatering ? 'WATERING...' : 'WATER NOW',
+                              _isWatering 
+                                  ? 'WATERING...' 
+                                  : (!_isDeviceOnline ? 'DEVICE OFFLINE' : 'WATER NOW'),
                               style: GoogleFonts.manrope(
                                 fontWeight: FontWeight.w600,
                                 letterSpacing: 0.8,
@@ -518,11 +674,11 @@ class _StatusPageState extends State<StatusPage> with TickerProviderStateMixin {
                                           DropdownMenuItem(value: 60, child: Text('1m')),
                                           DropdownMenuItem(value: 120, child: Text('2m')),
                                         ],
-                                        onChanged: (val) {
+                                        onChanged: _isDeviceOnline ? (val) {
                                           if (val != null) {
                                             _updateWateringDuration(val);
                                           }
-                                        },
+                                        } : null,
                                       ),
                                     ],
                                   ),
@@ -552,7 +708,7 @@ class _StatusPageState extends State<StatusPage> with TickerProviderStateMixin {
                                         ],
                                       ),
                                       OutlinedButton.icon(
-                                        onPressed: _cancelDelayTimer,
+                                        onPressed: _isDeviceOnline ? _cancelDelayTimer : null,
                                         icon: const Icon(Icons.cancel, size: 16),
                                         label: Text(
                                           'Cancel',
@@ -581,6 +737,96 @@ class _StatusPageState extends State<StatusPage> with TickerProviderStateMixin {
                                     ),
                                   ),
                                 ],
+                              ],
+                            ),
+                          ),
+                          const SizedBox(height: 24),
+
+                          // --- Daily Watering Schedule Card ---
+                          Container(
+                            width: double.infinity,
+                            padding: const EdgeInsets.all(20.0),
+                            decoration: BoxDecoration(
+                              color: cardColor,
+                              borderRadius: BorderRadius.circular(16),
+                              border: Border.all(color: borderColor),
+                            ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    Row(
+                                      children: [
+                                        Icon(Icons.alarm, color: primaryColor),
+                                        const SizedBox(width: 8),
+                                        Text(
+                                          'Daily Schedule',
+                                          style: GoogleFonts.manrope(
+                                            fontSize: 16,
+                                            fontWeight: FontWeight.w700,
+                                            color: textMain,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                    Switch(
+                                      value: _dailyWateringEnabled,
+                                      onChanged: _isDeviceOnline ? _toggleDailyWatering : null,
+                                      activeColor: primaryColor,
+                                      activeTrackColor: isDark ? const Color(0xFF1E3226) : const Color(0xFFDFEBE0),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 12),
+                                Text(
+                                  'Automatically water your plant at this time every day:',
+                                  style: GoogleFonts.manrope(
+                                    fontSize: 14,
+                                    color: textSecondary,
+                                  ),
+                                ),
+                                const SizedBox(height: 16),
+                                InkWell(
+                                  onTap: _isDeviceOnline ? _selectDailyWateringTime : null,
+                                  borderRadius: BorderRadius.circular(12),
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                                    decoration: BoxDecoration(
+                                      color: isDark ? const Color(0xFF16221A) : const Color(0xFFF1FCF1),
+                                      borderRadius: BorderRadius.circular(12),
+                                      border: Border.all(color: borderColor),
+                                    ),
+                                    child: Row(
+                                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                      children: [
+                                        Text(
+                                          'Scheduled Time',
+                                          style: GoogleFonts.manrope(
+                                            fontSize: 14,
+                                            fontWeight: FontWeight.w600,
+                                            color: textMain,
+                                          ),
+                                        ),
+                                        Row(
+                                          children: [
+                                            Text(
+                                              _formatTimeString(_dailyWateringTime),
+                                              style: GoogleFonts.manrope(
+                                                fontSize: 16,
+                                                fontWeight: FontWeight.w800,
+                                                color: primaryColor,
+                                              ),
+                                            ),
+                                            const SizedBox(width: 8),
+                                            Icon(Icons.edit, size: 16, color: primaryColor),
+                                          ],
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
                               ],
                             ),
                           ),
