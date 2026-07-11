@@ -704,11 +704,26 @@ class _StatusPageState extends State<StatusPage> with TickerProviderStateMixin {
                                         ),
                                       ),
                                     ),
-                                    const SizedBox(height: 8),
+                                    const SizedBox(height: 6),
+                                    Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        if (_isCharging)
+                                          const Icon(Icons.flash_on, size: 12, color: Colors.amber),
+                                        Text(
+                                          '$_batteryPercentage%',
+                                          style: GoogleFonts.manrope(
+                                            fontSize: 11,
+                                            fontWeight: FontWeight.w800,
+                                            color: textMain,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
                                     Text(
-                                      'BATTERY',
+                                      _isCharging ? 'CHARGING' : 'BATTERY',
                                       style: GoogleFonts.manrope(
-                                        fontSize: 11,
+                                        fontSize: 9,
                                         fontWeight: FontWeight.w700,
                                         color: textSecondary,
                                         letterSpacing: 0.5,
