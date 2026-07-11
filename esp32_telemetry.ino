@@ -245,7 +245,7 @@ void sendTelemetryData() {
   Serial.println("%)");
   // ------------------------------------
 
-  bool isCharging = digitalRead(chargingPin) == HIGH;
+  bool isCharging = digitalRead(chargingPin) == LOW; // TP4056 CHRG pin is LOW when charging
   bool motorActive = digitalRead(motorRelayPin) == LOW; // Check current relay state
 
   // Build JSON
