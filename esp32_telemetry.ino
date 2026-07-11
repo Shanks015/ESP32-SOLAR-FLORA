@@ -175,20 +175,24 @@ void processWateringLogic() {
 
       if (triggerWatering && !motorRunning) {
         Serial.println("Triggering watering cycle!");
-        motorDuration = duration * 1000UL; // Convert seconds to milliseconds
-        motorStartTime = millis();
-        motorRunning = true;
-        pinMode(motorRelayPin, OUTPUT);   // Take control of the pin
-        digitalWrite(motorRelayPin, LOW); // Relay ON (Active Low)
-        Serial.print("Relay ON for ");
-        Serial.print(duration);
-        Serial.println("s (non-blocking).");
 
-        // Reset motor_active in DB immediately so we don't re-trigger
+        // 1. Reset motor_active in DB FIRST (this HTTP call takes ~1-2s)
         if (motorActive) {
           updateDatabaseMotorActive(false);
         }
-      } else {
+
+        // 2. Start timer AFTER the HTTP call so duration is accurate
+        motorDuration = (unsigned long)(duration) * 1000UL;
+        motorStartTime = millis();
+        motorRunning = true;
+
+        // 3. Turn relay ON last
+        pinMode(motorRelayPin, OUTPUT);
+        digitalWrite(motorRelayPin, LOW);
+        Serial.print("Relay ON for ");
+        Serial.print(duration);
+        Serial.println("s (non-blocking).");
+      } else if (!triggerWatering) {
         Serial.println("No watering triggers active.");
       }
     }
