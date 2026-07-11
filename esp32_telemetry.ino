@@ -219,6 +219,8 @@ void sendTelemetryData() {
   // --- ACCURATE BATTERY CALCULATION ---
   int batteryRaw = analogRead(batteryPin);
   
+  Serial.print("DEBUG Raw ADC: "); Serial.println(batteryRaw);
+
   // 1. Convert the raw ADC reading (0-4095) to actual voltage at the pin (0-3.3V)
   float pinVoltage = (batteryRaw / 4095.0) * 3.3;
   
