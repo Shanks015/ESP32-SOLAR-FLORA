@@ -5,7 +5,7 @@
 #include "time.h"
 
 // --- Network & Supabase Credentials ---
-#include "secrets.h"
+#include "secrets.h" // secrets.h no longer needs SSID and Password!
 
 const char* deviceId = "ESP32_SOLAR_001";
 
@@ -207,15 +207,41 @@ void sendTelemetryData() {
   HTTPClient http;
   String url = String(supabaseUrl) + "/rest/v1/telemetry";
   http.begin(url);
-  
+
   http.addHeader("apikey", supabaseKey);
   http.addHeader("Authorization", "Bearer " + String(supabaseKey));
   http.addHeader("Content-Type", "application/json");
   http.addHeader("Prefer", "return=minimal");
 
-  // Read Sensors
+  // --- ACCURATE BATTERY CALCULATION ---
   int batteryRaw = analogRead(batteryPin);
-  int batteryPercentage = map(batteryRaw, 0, 4095, 0, 100); 
+  
+  // 1. Convert the raw ADC reading (0-4095) to actual voltage at the pin (0-3.3V)
+  float pinVoltage = (batteryRaw / 4095.0) * 3.3;
+  
+  // 2. Multiply by 2 because our two identical 100k resistors cut the voltage exactly in half
+  float batteryVoltage = pinVoltage * 2.0;
+  
+  // 3. Convert to percentage (18650s are full at 4.2V and empty around 3.2V)
+  int batteryPercentage = 0;
+  if (batteryVoltage >= 4.2) {
+    batteryPercentage = 100;
+  } else if (batteryVoltage <= 3.2) {
+    batteryPercentage = 0;
+  } else {
+    batteryPercentage = (int)(((batteryVoltage - 3.2) / (4.2 - 3.2)) * 100);
+  }
+  
+  // Ensure it never sends a weird number above 100 or below 0
+  batteryPercentage = constrain(batteryPercentage, 0, 100);
+  
+  Serial.print("Battery Voltage: ");
+  Serial.print(batteryVoltage);
+  Serial.print("V (");
+  Serial.print(batteryPercentage);
+  Serial.println("%)");
+  // ------------------------------------
+
   bool isCharging = digitalRead(chargingPin) == HIGH;
   bool motorActive = digitalRead(motorRelayPin) == LOW; // Check current relay state
 
@@ -225,7 +251,7 @@ void sendTelemetryData() {
   #else
   DynamicJsonDocument doc(512);
   #endif
-  
+
   doc["device_id"] = deviceId;
   doc["user_id"] = userId;
   doc["battery_percentage"] = batteryPercentage;
@@ -238,7 +264,7 @@ void sendTelemetryData() {
   int httpResponseCode = http.POST(jsonPayload);
   Serial.print("POST (Telemetry Upload) Response Code: ");
   Serial.println(httpResponseCode);
-  
+
   if (httpResponseCode == 201 || httpResponseCode == 200) {
     Serial.println("Telemetry successfully uploaded.");
   } else {
