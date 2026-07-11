@@ -36,7 +36,8 @@ class _StatusPageState extends State<StatusPage> with TickerProviderStateMixin {
 
   // Telemetry state
   int _batteryPercentage = 85;
-  bool _isCharging = true;
+  int _previousBatteryPercentage = -1; // -1 means no previous reading yet
+  bool _isCharging = false;
   Timer? _telemetryTimer;
 
   // Device connectivity states
@@ -91,8 +92,19 @@ class _StatusPageState extends State<StatusPage> with TickerProviderStateMixin {
         final telemetry = await _supabaseService.getLatestTelemetry(userId);
         if (telemetry != null && mounted) {
           setState(() {
-            _batteryPercentage = telemetry['battery_percentage'] ?? 85;
-            _isCharging = telemetry['is_charging'] ?? true;
+            final newPercentage = telemetry['battery_percentage'] ?? 85;
+
+            // Derive charging state from battery % trend
+            if (_previousBatteryPercentage != -1) {
+              if (newPercentage > _previousBatteryPercentage) {
+                _isCharging = true;  // % went up → charging
+              } else if (newPercentage < _previousBatteryPercentage) {
+                _isCharging = false; // % went down → discharging
+              }
+              // If equal, keep previous state (no change)
+            }
+            _previousBatteryPercentage = newPercentage;
+            _batteryPercentage = newPercentage;
 
             final lastSeenStr = telemetry['created_at'];
             if (lastSeenStr != null) {

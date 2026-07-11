@@ -255,7 +255,6 @@ void sendTelemetryData() {
   Serial.println("%)");
   // ------------------------------------
 
-  bool isCharging = digitalRead(chargingPin) == LOW; // TP4056 CHRG pin is LOW when charging
   bool motorActive = digitalRead(motorRelayPin) == LOW; // Check current relay state
 
   // Build JSON
@@ -268,7 +267,7 @@ void sendTelemetryData() {
   doc["device_id"] = deviceId;
   doc["user_id"] = userId;
   doc["battery_percentage"] = batteryPercentage;
-  doc["is_charging"] = isCharging;
+  doc["is_charging"] = false; // Charging state determined by Flutter app from % trend
   doc["motor_active"] = motorActive;
 
   String jsonPayload;
