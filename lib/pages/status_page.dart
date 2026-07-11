@@ -102,6 +102,9 @@ class _StatusPageState extends State<StatusPage> with TickerProviderStateMixin {
               
               // ESP32 uploads every 5 seconds. If no update for 12 seconds, it is offline.
               _isDeviceOnline = diff.inSeconds <= 12;
+              if (!_isDeviceOnline) {
+                _isCharging = false;
+              }
               
               if (diff.inSeconds < 60) {
                 _lastSeenText = 'Just now';
@@ -114,6 +117,7 @@ class _StatusPageState extends State<StatusPage> with TickerProviderStateMixin {
               }
             } else {
               _isDeviceOnline = false;
+              _isCharging = false;
               _lastSeenText = 'Never';
             }
 
@@ -124,6 +128,7 @@ class _StatusPageState extends State<StatusPage> with TickerProviderStateMixin {
         } else if (mounted) {
           setState(() {
             _isDeviceOnline = false;
+            _isCharging = false;
             _lastSeenText = 'Never';
           });
         }
