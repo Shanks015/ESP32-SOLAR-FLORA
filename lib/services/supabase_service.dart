@@ -138,7 +138,11 @@ class SupabaseService {
     try {
       await _supabase.storage
           .from('avatars')
-          .upload(fileName, File(filePath));
+          .upload(
+            fileName,
+            File(filePath),
+            fileOptions: const FileOptions(upsert: true),
+          );
 
       // Get public URL
       final avatarUrl = _supabase.storage.from('avatars').getPublicUrl(fileName);

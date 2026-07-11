@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart'; // Required for Clipboard
 import 'package:google_fonts/google_fonts.dart';
+import 'package:image_picker/image_picker.dart'; // Import Image Picker
 import '../services/supabase_service.dart';
 import '../widgets/custom_widgets.dart';
 import '../main.dart'; // Import themeModeNotifier to toggle global theme state
@@ -17,7 +18,12 @@ class _SettingsPageState extends State<SettingsPage> {
   final SupabaseService _supabaseService = SupabaseService();
   Map<String, dynamic>? _profileData;
   bool _isLoading = true;
+  bool _isAvatarUploading = false;
   String _userId = '';
+  String _fullName = 'Plant Caretaker';
+  String _email = 'flora.user@gmail.com';
+  String? _avatarUrl;
+  
   int _numberOfPlants = 3;
   bool _darkMode = false;
   bool _notifications = true;
@@ -34,6 +40,7 @@ class _SettingsPageState extends State<SettingsPage> {
     if (user != null) {
       setState(() {
         _userId = user.id;
+        _email = user.email ?? 'flora.user@gmail.com';
       });
       final profile = await _supabaseService.getProfile(user.id);
       if (mounted) {
@@ -41,6 +48,8 @@ class _SettingsPageState extends State<SettingsPage> {
           _profileData = profile;
           _isLoading = false;
           if (profile != null) {
+            _fullName = profile['full_name'] ?? 'Plant Caretaker';
+            _avatarUrl = profile['avatar_url'];
             _numberOfPlants = profile['number_of_plants'] ?? 3;
             _darkMode = profile['dark_mode'] ?? false;
             _notifications = profile['notifications'] ?? true;
@@ -51,6 +60,91 @@ class _SettingsPageState extends State<SettingsPage> {
           }
         });
       }
+    }
+  }
+
+  Future<void> _updateName() async {
+    final controller = TextEditingController(text: _fullName);
+    final newName = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Edit Full Name', style: GoogleFonts.manrope(fontWeight: FontWeight.w600)),
+        content: TextField(
+          controller: controller,
+          decoration: const InputDecoration(
+            border: OutlineInputBorder(),
+            labelText: 'Full Name',
+          ),
+          autofocus: true,
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: Text('Cancel', style: GoogleFonts.manrope(color: Colors.grey)),
+          ),
+          TextButton(
+            onPressed: () {
+              Navigator.of(context).pop(controller.text.trim());
+            },
+            child: Text('Save', style: GoogleFonts.manrope(color: const Color(0xFF4F635B), fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
+    );
+
+    if (newName != null && newName.isNotEmpty && newName != _fullName) {
+      setState(() {
+        _fullName = newName;
+      });
+      await _supabaseService.updateProfile({'full_name': newName});
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Name updated successfully!', style: GoogleFonts.manrope())),
+      );
+    }
+  }
+
+  Future<void> _pickAndUploadAvatar() async {
+    if (_isAvatarUploading) return;
+
+    final ImagePicker picker = ImagePicker();
+    final XFile? image = await picker.pickImage(
+      source: ImageSource.gallery,
+      maxWidth: 300,
+      maxHeight: 300,
+      imageQuality: 85,
+    );
+
+    if (image == null) return;
+
+    setState(() {
+      _isAvatarUploading = true;
+    });
+
+    try {
+      final newUrl = await _supabaseService.uploadAvatar(image.path);
+      if (newUrl != null) {
+        await _supabaseService.updateProfile({'avatar_url': newUrl});
+        setState(() {
+          _avatarUrl = newUrl;
+        });
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Profile picture updated!', style: GoogleFonts.manrope())),
+          );
+        }
+      } else {
+        throw Exception('Upload failed');
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to upload image. Make sure storage policy is active.', style: GoogleFonts.manrope())),
+        );
+      }
+    } finally {
+      setState(() {
+        _isAvatarUploading = false;
+      });
     }
   }
 
@@ -188,40 +282,84 @@ class _SettingsPageState extends State<SettingsPage> {
                         ),
                         child: Row(
                           children: [
-                            Container(
-                              width: 64,
-                              height: 64,
-                              decoration: const BoxDecoration(
-                                shape: BoxShape.circle,
-                                image: DecorationImage(
-                                  image: NetworkImage(
-                                    'https://lh3.googleusercontent.com/aida-public/AB6AXuCPRxeU9qQJDxAq8jYyQkgHxIYDgql8TckEoPY5s7ZxXXByuFuUa73GmV-oWebAOIeWQubKQiOdlYLBrInl9JW7EkTB8KZyEjCI9NWrmF_UKrVLJQeJf-NXL4dy1OcQ3XBfq8K7CJeaY5IYEG2HNUBhp00K9Vx9NiHAHE4c5ecEfTU9QPwGnIeKj_cw4-A2B7CU9B3pdUsEWM4zlEHlxYEiwHEvo1ebbGomYKybWJ0Rz0tqfqDIF15n',
+                            // Interactive Avatar Selector
+                            GestureDetector(
+                              onTap: _pickAndUploadAvatar,
+                              child: Stack(
+                                children: [
+                                  CircleAvatar(
+                                    radius: 32,
+                                    backgroundImage: _avatarUrl != null && _avatarUrl!.isNotEmpty
+                                        ? NetworkImage(_avatarUrl!)
+                                        : const NetworkImage(
+                                            'https://lh3.googleusercontent.com/aida-public/AB6AXuCPRxeU9qQJDxAq8jYyQkgHxIYDgql8TckEoPY5s7ZxXXByuFuUa73GmV-oWebAOIeWQubKQiOdlYLBrInl9JW7EkTB8KZyEjCI9NWrmF_UKrVLJQeJf-NXL4dy1OcQ3XBfq8K7CJeaY5IYEG2HNUBhp00K9Vx9NiHAHE4c5ecEfTU9QPwGnIeKj_cw4-A2B7CU9B3pdUsEWM4zlEHlxYEiwHEvo1ebbGomYKybWJ0Rz0tqfqDIF15n',
+                                          ),
+                                    backgroundColor: Colors.transparent,
                                   ),
-                                  fit: BoxFit.cover,
-                                ),
+                                  if (_isAvatarUploading)
+                                    const Positioned.fill(
+                                      child: CircularProgressIndicator(
+                                        color: Color(0xFF4F635B),
+                                        strokeWidth: 3,
+                                      ),
+                                    ),
+                                  Positioned(
+                                    bottom: 0,
+                                    right: 0,
+                                    child: Container(
+                                      padding: const EdgeInsets.all(4),
+                                      decoration: BoxDecoration(
+                                        color: primaryLabelColor,
+                                        shape: BoxShape.circle,
+                                        border: Border.all(color: cardColor, width: 2),
+                                      ),
+                                      child: Icon(
+                                        Icons.camera_alt,
+                                        size: 12,
+                                        color: isDark ? const Color(0xFF16221A) : Colors.white,
+                                      ),
+                                    ),
+                                  ),
+                                ],
                               ),
                             ),
                             const SizedBox(width: 16),
+                            // Profile name and email (loaded dynamically)
                             Expanded(
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  Text(
-                                    'Plant Caretaker',
-                                    style: GoogleFonts.manrope(
-                                      fontSize: 18,
-                                      fontWeight: FontWeight.w700,
-                                      color: textMainColor,
-                                    ),
+                                  Row(
+                                    children: [
+                                      Expanded(
+                                        child: Text(
+                                          _fullName,
+                                          style: GoogleFonts.manrope(
+                                            fontSize: 18,
+                                            fontWeight: FontWeight.w700,
+                                            color: textMainColor,
+                                          ),
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                      ),
+                                      IconButton(
+                                        icon: const Icon(Icons.edit, size: 16),
+                                        onPressed: _updateName,
+                                        padding: EdgeInsets.zero,
+                                        constraints: const BoxConstraints(),
+                                        color: primaryLabelColor,
+                                      ),
+                                    ],
                                   ),
                                   const SizedBox(height: 4),
                                   Text(
-                                    'flora.user@gmail.com',
+                                    _email,
                                     style: GoogleFonts.manrope(
                                       fontSize: 14,
                                       fontWeight: FontWeight.w400,
                                       color: textSecondaryColor,
                                     ),
+                                    overflow: TextOverflow.ellipsis,
                                   ),
                                 ],
                               ),
@@ -295,10 +433,10 @@ class _SettingsPageState extends State<SettingsPage> {
                             Text(
                               'Device ID',
                               style: GoogleFonts.manrope(
-                                fontSize: 13,
-                                fontWeight: FontWeight.w600,
-                                color: textSecondaryColor,
-                              ),
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w600,
+                                  color: textSecondaryColor,
+                                ),
                             ),
                             const SizedBox(height: 4),
                             Text(

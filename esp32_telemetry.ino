@@ -1,6 +1,7 @@
 #include <WiFi.h>
 #include <HTTPClient.h>
 #include <ArduinoJson.h>
+#include "time.h"
 
 // --- Network & Supabase Credentials ---
 #include "secrets.h"
@@ -12,150 +13,238 @@ const int batteryPin = 34;
 const int chargingPin = 35;  
 const int motorRelayPin = 4; // Assuming GPIO 4 for your water pump relay
 
-// --- Timers ---
-unsigned long previousTelemetryTime = 0;
-const long telemetryInterval = 30000; // Send data every 30 seconds
+// --- Deep Sleep Config ---
+#define uS_TO_S_FACTOR 1000000ULL  /* Conversion factor for micro seconds to seconds */
+#define TIME_TO_SLEEP  600        /* Time ESP32 will sleep (in seconds) - 10 minutes */
 
-unsigned long previousPollTime = 0;
-const long pollInterval = 3000; // Check for "Water Now" button every 3 seconds
+// --- NTP Time Setup ---
+const long gmtOffset_sec = 19800;  // Adjust to your local timezone (e.g. India GMT+5:30 is 19800)
+const int daylightOffset_sec = 0;
 
 void setup() {
   Serial.begin(115200);
+  delay(500); // Wait for serial to initialize
   
+  Serial.println("\n-------------------------------------------");
+  Serial.println("ESP32 WOKE UP from Deep Sleep Mode!");
+  Serial.println("-------------------------------------------");
+
   pinMode(chargingPin, INPUT);
   pinMode(motorRelayPin, OUTPUT);
   digitalWrite(motorRelayPin, HIGH); // Relay OFF by default (Active Low)
 
-  // Connect to WiFi
-  WiFi.begin(ssid, password);
-  Serial.print("Connecting to WiFi");
-  while (WiFi.status() != WL_CONNECTED) {
-    delay(500);
-    Serial.print(".");
+  // 1. Connect to WiFi
+  connectWiFi();
+
+  if (WiFi.status() == WL_CONNECTED) {
+    // 2. Synchronize Clock with Internet NTP Time
+    configTime(gmtOffset_sec, daylightOffset_sec, "pool.ntp.org", "time.nist.gov");
+    Serial.println("Synchronizing internet time...");
+    struct tm timeinfo;
+    if (getLocalTime(&timeinfo)) {
+      Serial.println(&timeinfo, "Time synchronized: %Y-%m-%d %H:%M:%S");
+    }
+
+    // 3. Process scheduled/manual watering commands
+    processWateringLogic();
+
+    // 4. Send telemetry update
+    sendTelemetryData();
+  } else {
+    Serial.println("Skipping network actions because WiFi is offline.");
   }
-  Serial.println("\nConnected to WiFi!");
+
+  // 5. Enter Deep Sleep (WiFi and CPU turn off completely)
+  Serial.print("Entering Deep Sleep for ");
+  Serial.print(TIME_TO_SLEEP / 60);
+  Serial.println(" minutes. Goodnight!");
+  
+  esp_sleep_enable_timer_wakeup(TIME_TO_SLEEP * uS_TO_S_FACTOR);
+  esp_deep_sleep_start();
 }
 
 void loop() {
-  unsigned long currentMillis = millis();
+  // Loop is never reached in Deep Sleep mode since setup() runs once per wakeup
+}
 
-  // 1. FAST LOOP: Check if the user pressed "Water Now" in the app
-  if (currentMillis - previousPollTime >= pollInterval) {
-    previousPollTime = currentMillis;
-    checkForWaterCommand();
+// ==========================================
+// WIFI CONNECT WITH TIMEOUT FOR POWER SAVINGS
+// ==========================================
+void connectWiFi() {
+  WiFi.begin(ssid, password);
+  Serial.print("Connecting to WiFi");
+  
+  int attempts = 0;
+  // Timeout after 15 seconds to prevent battery drain if WiFi is down
+  while (WiFi.status() != WL_CONNECTED && attempts < 30) {
+    delay(500);
+    Serial.print(".");
+    attempts++;
   }
-
-  // 2. SLOW LOOP: Send battery & solar data to the app
-  if (currentMillis - previousTelemetryTime >= telemetryInterval) {
-    previousTelemetryTime = currentMillis;
-    sendTelemetryData();
+  
+  if (WiFi.status() == WL_CONNECTED) {
+    Serial.println("\nConnected to WiFi!");
+  } else {
+    Serial.println("\nWiFi Connection failed/timed out.");
   }
 }
 
 // ==========================================
-// FUNCTION 1: CHECK FOR APP COMMANDS (GET)
+// PROCESS MANUAL COMMANDS AND SCHEDULES
 // ==========================================
-void checkForWaterCommand() {
-  if (WiFi.status() == WL_CONNECTED) {
-    HTTPClient http;
+void processWateringLogic() {
+  HTTPClient http;
+  
+  // Fetch columns needed for schedules and controls
+  String url = String(supabaseUrl) + "/rest/v1/profiles?select=motor_active,daily_watering_enabled,daily_watering_time,watering_duration&id=eq." + String(userId);
+  http.begin(url);
+  
+  http.addHeader("apikey", supabaseKey);
+  http.addHeader("Authorization", "Bearer " + String(supabaseKey));
+
+  int httpResponseCode = http.GET();
+  Serial.print("GET (Command Check) Response Code: ");
+  Serial.println(httpResponseCode);
+
+  if (httpResponseCode == 200) {
+    String payload = http.getString();
+    Serial.print("Payload received: ");
+    Serial.println(payload);
     
-    // Specifically ask Supabase for the motor_active status of YOUR profile
-    String url = String(supabaseUrl) + "/rest/v1/profiles?select=motor_active&id=eq." + String(userId);
-    http.begin(url);
-    
-    http.addHeader("apikey", supabaseKey);
-    http.addHeader("Authorization", "Bearer " + String(supabaseKey));
-
-    int httpResponseCode = http.GET();
-    Serial.print("GET (Command Check) Response Code: ");
-    Serial.println(httpResponseCode);
-
-    if (httpResponseCode == 200) {
-      String payload = http.getString();
-      Serial.print("Payload received: ");
-      Serial.println(payload);
-      
-      // Parse the JSON array returned by Supabase: [{"motor_active":true}]
-      #if ARDUINOJSON_VERSION_MAJOR >= 7
-      JsonDocument doc;
-      #else
-      DynamicJsonDocument doc(512);
-      #endif
-      
-      DeserializationError error = deserializeJson(doc, payload);
-      
-      if (!error) {
-        if (doc.size() > 0) {
-          bool shouldWater = doc[0]["motor_active"];
-          if (shouldWater) {
-            Serial.println("COMMAND RECEIVED: Turning Pump ON!");
-            digitalWrite(motorRelayPin, LOW); // Trigger Relay (Active Low)
-          } else {
-            Serial.println("Pump Command: OFF.");
-            digitalWrite(motorRelayPin, HIGH); // Turn off Relay
-          }
-        } else {
-          Serial.println("Warning: Profile row not found for this User ID!");
-        }
-      } else {
-        Serial.print("JSON Deserialization Error: ");
-        Serial.println(error.c_str());
-      }
-    } else {
-      Serial.print("Error GET response: ");
-      Serial.println(http.getString());
-    }
-    http.end();
-  }
-}
-
-// ==========================================
-// FUNCTION 2: SEND TELEMETRY (POST)
-// ==========================================
-void sendTelemetryData() {
-  if (WiFi.status() == WL_CONNECTED) {
-    HTTPClient http;
-    
-    String url = String(supabaseUrl) + "/rest/v1/telemetry";
-    http.begin(url);
-    
-    http.addHeader("apikey", supabaseKey);
-    http.addHeader("Authorization", "Bearer " + String(supabaseKey));
-    http.addHeader("Content-Type", "application/json");
-    http.addHeader("Prefer", "return=minimal");
-
-    // Read Sensors
-    int batteryRaw = analogRead(batteryPin);
-    int batteryPercentage = map(batteryRaw, 0, 4095, 0, 100); 
-    bool isCharging = digitalRead(chargingPin) == HIGH;
-    bool motorActive = digitalRead(motorRelayPin) == LOW; // Check current relay state
-
-    // Build JSON
     #if ARDUINOJSON_VERSION_MAJOR >= 7
     JsonDocument doc;
     #else
     DynamicJsonDocument doc(512);
     #endif
     
-    doc["device_id"] = deviceId;
-    doc["user_id"] = userId;
-    doc["battery_percentage"] = batteryPercentage;
-    doc["is_charging"] = isCharging;
-    doc["motor_active"] = motorActive;
-
-    String jsonPayload;
-    serializeJson(doc, jsonPayload);
-
-    int httpResponseCode = http.POST(jsonPayload);
-    Serial.print("POST (Telemetry Upload) Response Code: ");
-    Serial.println(httpResponseCode);
+    DeserializationError error = deserializeJson(doc, payload);
     
-    if (httpResponseCode == 201 || httpResponseCode == 200) {
-      Serial.println("Telemetry successfully sent to App.");
-    } else {
-      Serial.print("Error POST response: ");
-      Serial.println(http.getString());
+    if (!error && doc.size() > 0) {
+      bool motorActive = doc[0]["motor_active"] | false;
+      bool dailyEnabled = doc[0]["daily_watering_enabled"] | false;
+      String dailyTime = doc[0]["daily_watering_time"] | "08:00:00";
+      int duration = doc[0]["watering_duration"] | 15;
+
+      bool triggerWatering = false;
+
+      // Check 1: Check manual trigger from the app
+      if (motorActive) {
+        Serial.println("Manual water command detected!");
+        triggerWatering = true;
+      } 
+      // Check 2: Check daily scheduled watering time
+      else if (dailyEnabled) {
+        struct tm timeinfo;
+        if (getLocalTime(&timeinfo)) {
+          char currentTime[6];
+          sprintf(currentTime, "%02d:%02d", timeinfo.tm_hour, timeinfo.tm_min);
+          
+          // Match HH:MM
+          if (dailyTime.substring(0, 5) == String(currentTime)) {
+            Serial.println("Daily watering schedule match!");
+            triggerWatering = true;
+          }
+        }
+      }
+
+      if (triggerWatering) {
+        Serial.println("Triggering watering cycle!");
+        digitalWrite(motorRelayPin, LOW); // Relay ON (Active Low)
+        
+        // Water for the configured duration (in seconds)
+        delay(duration * 1000);
+        
+        digitalWrite(motorRelayPin, HIGH); // Relay OFF
+        Serial.println("Watering cycle complete.");
+
+        // If it was a manual click, reset it back to false in the database
+        if (motorActive) {
+          updateDatabaseMotorActive(false);
+        }
+      } else {
+        Serial.println("No watering triggers active.");
+      }
     }
-    http.end();
+  } else {
+    Serial.print("Error GET response: ");
+    Serial.println(http.getString());
   }
+  http.end();
+}
+
+// ==========================================
+// RESET MOTOR TRIGGER IN DATABASE
+// ==========================================
+void updateDatabaseMotorActive(bool active) {
+  HTTPClient http;
+  String url = String(supabaseUrl) + "/rest/v1/profiles?id=eq." + String(userId);
+  http.begin(url);
+  
+  http.addHeader("apikey", supabaseKey);
+  http.addHeader("Authorization", "Bearer " + String(supabaseKey));
+  http.addHeader("Content-Type", "application/json");
+  http.addHeader("Prefer", "return=minimal");
+
+  #if ARDUINOJSON_VERSION_MAJOR >= 7
+  JsonDocument doc;
+  #else
+  DynamicJsonDocument doc(256);
+  #endif
+  doc["motor_active"] = active;
+
+  String jsonPayload;
+  serializeJson(doc, jsonPayload);
+
+  int httpResponseCode = http.PATCH(jsonPayload); // PATCH updates target fields
+  Serial.print("PATCH (Motor Reset) Response Code: ");
+  Serial.println(httpResponseCode);
+  http.end();
+}
+
+// ==========================================
+// SEND TELEMETRY TO DATABASE
+// ==========================================
+void sendTelemetryData() {
+  HTTPClient http;
+  String url = String(supabaseUrl) + "/rest/v1/telemetry";
+  http.begin(url);
+  
+  http.addHeader("apikey", supabaseKey);
+  http.addHeader("Authorization", "Bearer " + String(supabaseKey));
+  http.addHeader("Content-Type", "application/json");
+  http.addHeader("Prefer", "return=minimal");
+
+  // Read Sensors
+  int batteryRaw = analogRead(batteryPin);
+  int batteryPercentage = map(batteryRaw, 0, 4095, 0, 100); 
+  bool isCharging = digitalRead(chargingPin) == HIGH;
+  bool motorActive = digitalRead(motorRelayPin) == LOW; // Check current relay state
+
+  // Build JSON
+  #if ARDUINOJSON_VERSION_MAJOR >= 7
+  JsonDocument doc;
+  #else
+  DynamicJsonDocument doc(512);
+  #endif
+  
+  doc["device_id"] = deviceId;
+  doc["user_id"] = userId;
+  doc["battery_percentage"] = batteryPercentage;
+  doc["is_charging"] = isCharging;
+  doc["motor_active"] = motorActive;
+
+  String jsonPayload;
+  serializeJson(doc, jsonPayload);
+
+  int httpResponseCode = http.POST(jsonPayload);
+  Serial.print("POST (Telemetry Upload) Response Code: ");
+  Serial.println(httpResponseCode);
+  
+  if (httpResponseCode == 201 || httpResponseCode == 200) {
+    Serial.println("Telemetry successfully uploaded.");
+  } else {
+    Serial.print("Error POST response: ");
+    Serial.println(http.getString());
+  }
+  http.end();
 }
