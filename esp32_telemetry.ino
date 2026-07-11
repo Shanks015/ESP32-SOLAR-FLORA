@@ -41,8 +41,16 @@ void setup() {
     configTime(gmtOffset_sec, daylightOffset_sec, "pool.ntp.org", "time.nist.gov");
     Serial.println("Synchronizing internet time...");
     struct tm timeinfo;
-    if (getLocalTime(&timeinfo)) {
-      Serial.println(&timeinfo, "Time synchronized: %Y-%m-%d %H:%M:%S");
+    int ntpRetries = 0;
+    while (!getLocalTime(&timeinfo) && ntpRetries < 10) {
+      Serial.print(".");
+      delay(500);
+      ntpRetries++;
+    }
+    if (ntpRetries < 10) {
+      Serial.println(&timeinfo, "\nTime synchronized: %Y-%m-%d %H:%M:%S");
+    } else {
+      Serial.println("\nNTP sync timed out. Continuing without time sync.");
     }
 
     // 3. Process scheduled/manual watering commands
