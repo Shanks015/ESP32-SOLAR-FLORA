@@ -49,6 +49,8 @@ void setup() {
     // 3. Process scheduled/manual watering commands
     processWateringLogic();
 
+    delay(1000); // 1-second delay to prevent HTTPS buffer overflow
+
     // 4. Send telemetry update
     sendTelemetryData();
   } else {
