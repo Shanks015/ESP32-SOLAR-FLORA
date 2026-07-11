@@ -121,6 +121,11 @@ class _StatusPageState extends State<StatusPage> with TickerProviderStateMixin {
               _triggerLocalWateringUI();
             }
           });
+        } else if (mounted) {
+          setState(() {
+            _isDeviceOnline = false;
+            _lastSeenText = 'Never';
+          });
         }
 
         // Fetch profiles data for configs and daily schedule

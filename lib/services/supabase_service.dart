@@ -117,15 +117,7 @@ class SupabaseService {
       return response;
     } catch (e) {
       print('Error getting telemetry: $e');
-      // Return a standard placeholder default if no telemetry is recorded yet
-      return {
-        'id': 0,
-        'device_id': 'MOCK-DEVICE',
-        'user_id': userId,
-        'battery_percentage': 85,
-        'is_charging': true,
-        'motor_active': false,
-      };
+      return null;
     }
   }
 
