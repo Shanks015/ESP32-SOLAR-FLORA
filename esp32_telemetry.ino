@@ -31,8 +31,7 @@ void setup() {
   Serial.println("-------------------------------------------");
 
   pinMode(chargingPin, INPUT);
-  pinMode(motorRelayPin, OUTPUT);
-  digitalWrite(motorRelayPin, HIGH); // Relay OFF by default (Active Low)
+  pinMode(motorRelayPin, INPUT); // High-impedance state (truly OFF for 5V relays)
 
   // 1. Connect to WiFi using WiFiManager
   connectWiFi();
@@ -150,12 +149,13 @@ void processWateringLogic() {
 
       if (triggerWatering) {
         Serial.println("Triggering watering cycle!");
+        pinMode(motorRelayPin, OUTPUT);   // Take control of the pin
         digitalWrite(motorRelayPin, LOW); // Relay ON (Active Low)
         
         // Water for the configured duration (in seconds)
         delay(duration * 1000);
         
-        digitalWrite(motorRelayPin, HIGH); // Relay OFF
+        pinMode(motorRelayPin, INPUT);    // Release control (Relay turns OFF)
         Serial.println("Watering cycle complete.");
 
         // If it was a manual click, reset it back to false in the database
