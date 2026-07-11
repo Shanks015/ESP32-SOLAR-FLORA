@@ -20,6 +20,11 @@ unsigned long lastTelemetryUpload = 0;
 const unsigned long COMMAND_INTERVAL  = 3000;   // Poll commands every 3 seconds
 const unsigned long TELEMETRY_INTERVAL = 5000;  // Upload telemetry every 5 seconds
 
+// --- Non-blocking Motor State ---
+bool motorRunning = false;
+unsigned long motorStartTime = 0;
+unsigned long motorDuration = 0; // in milliseconds
+
 // --- NTP Time Setup ---
 const long gmtOffset_sec = 19800;  // Adjust to your local timezone (e.g. India GMT+5:30 is 19800)
 const int daylightOffset_sec = 0;
@@ -65,6 +70,14 @@ void loop() {
   }
 
   unsigned long now = millis();
+
+  // --- Non-blocking motor shutoff check ---
+  if (motorRunning && (now - motorStartTime >= motorDuration)) {
+    pinMode(motorRelayPin, INPUT); // Release relay (turns OFF)
+    motorRunning = false;
+    Serial.println("Watering cycle complete.");
+    updateDatabaseMotorActive(false);
+  }
 
   // Check for watering commands every 3 seconds
   if (now - lastCommandCheck >= COMMAND_INTERVAL) {
@@ -157,18 +170,18 @@ void processWateringLogic() {
         }
       }
 
-      if (triggerWatering) {
+      if (triggerWatering && !motorRunning) {
         Serial.println("Triggering watering cycle!");
+        motorDuration = duration * 1000UL; // Convert seconds to milliseconds
+        motorStartTime = millis();
+        motorRunning = true;
         pinMode(motorRelayPin, OUTPUT);   // Take control of the pin
         digitalWrite(motorRelayPin, LOW); // Relay ON (Active Low)
-        
-        // Water for the configured duration (in seconds)
-        delay(duration * 1000);
-        
-        pinMode(motorRelayPin, INPUT);    // Release control (Relay turns OFF)
-        Serial.println("Watering cycle complete.");
+        Serial.print("Relay ON for ");
+        Serial.print(duration);
+        Serial.println("s (non-blocking).");
 
-        // If it was a manual click, reset it back to false in the database
+        // Reset motor_active in DB immediately so we don't re-trigger
         if (motorActive) {
           updateDatabaseMotorActive(false);
         }
