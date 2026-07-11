@@ -134,7 +134,6 @@ void processWateringLogic() {
       bool dailyEnabled = doc[0]["daily_watering_enabled"] | false;
       String dailyTime = doc[0]["daily_watering_time"] | "08:00:00";
       int duration = doc[0]["watering_duration"] | 15;
-      sleepInterval = doc[0]["sleep_interval"] | 600; // Parse the dynamically configured sleep interval
 
       bool triggerWatering = false;
 
