@@ -24,6 +24,7 @@ const unsigned long TELEMETRY_INTERVAL = 5000;  // Upload telemetry every 5 seco
 bool motorRunning = false;
 unsigned long motorStartTime = 0;
 unsigned long motorDuration = 0; // in milliseconds
+int lastDailyWateringDay = -1;   // Tracks which day daily schedule last fired (-1 = never)
 
 // --- NTP Time Setup ---
 const long gmtOffset_sec = 19800;  // Adjust to your local timezone (e.g. India GMT+5:30 is 19800)
@@ -162,9 +163,11 @@ void processWateringLogic() {
           char currentTime[6];
           sprintf(currentTime, "%02d:%02d", timeinfo.tm_hour, timeinfo.tm_min);
           
-          // Match HH:MM
-          if (dailyTime.substring(0, 5) == String(currentTime)) {
+          // Match HH:MM and only trigger once per day
+          if (dailyTime.substring(0, 5) == String(currentTime) &&
+              timeinfo.tm_mday != lastDailyWateringDay) {
             Serial.println("Daily watering schedule match!");
+            lastDailyWateringDay = timeinfo.tm_mday; // Mark today as done
             triggerWatering = true;
           }
         }
