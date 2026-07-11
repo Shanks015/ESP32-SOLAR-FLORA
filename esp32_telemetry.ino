@@ -14,9 +14,11 @@ const int batteryPin = 34;
 const int chargingPin = 33;   // Moved from GPIO 35 (no pull-up support) to GPIO 33
 const int motorRelayPin = 4; // Assuming GPIO 4 for your water pump relay
 
-// --- Deep Sleep Config ---
-#define uS_TO_S_FACTOR 1000000ULL  /* Conversion factor for micro seconds to seconds */
-int sleepInterval = 600;           /* Default sleep time in seconds - 10 minutes */
+// --- Continuous Loop Timers ---
+unsigned long lastCommandCheck = 0;
+unsigned long lastTelemetryUpload = 0;
+const unsigned long COMMAND_INTERVAL  = 3000;   // Poll commands every 3 seconds
+const unsigned long TELEMETRY_INTERVAL = 5000;  // Upload telemetry every 5 seconds
 
 // --- NTP Time Setup ---
 const long gmtOffset_sec = 19800;  // Adjust to your local timezone (e.g. India GMT+5:30 is 19800)
@@ -24,13 +26,12 @@ const int daylightOffset_sec = 0;
 
 void setup() {
   Serial.begin(115200);
-  delay(500); // Wait for serial to initialize
+  delay(500);
   
   Serial.println("\n-------------------------------------------");
-  Serial.println("ESP32 WOKE UP from Deep Sleep Mode!");
+  Serial.println("ESP32 Solar Flora - Continuous Mode");
   Serial.println("-------------------------------------------");
 
-  pinMode(chargingPin, INPUT_PULLUP); // Pull-up so CHRG pin reads HIGH when not charging
   pinMode(motorRelayPin, INPUT); // High-impedance state (truly OFF for 5V relays)
 
   // 1. Connect to WiFi using WiFiManager
@@ -50,31 +51,32 @@ void setup() {
     if (ntpRetries < 10) {
       Serial.println(&timeinfo, "\nTime synchronized: %Y-%m-%d %H:%M:%S");
     } else {
-      Serial.println("\nNTP sync timed out. Continuing without time sync.");
+      Serial.println("\nNTP sync timed out. Continuing anyway.");
     }
-
-    // 3. Process scheduled/manual watering commands
-    processWateringLogic();
-
-    delay(1000); // 1-second delay to prevent HTTPS buffer overflow
-
-    // 4. Send telemetry update
-    sendTelemetryData();
-  } else {
-    Serial.println("Skipping network actions because WiFi configuration failed or timed out.");
   }
-
-  // 5. Enter Deep Sleep (WiFi and CPU turn off completely)
-  Serial.print("Entering Deep Sleep for ");
-  Serial.print(sleepInterval);
-  Serial.println(" seconds. Goodnight!");
-  
-  esp_sleep_enable_timer_wakeup(sleepInterval * uS_TO_S_FACTOR);
-  esp_deep_sleep_start();
 }
 
 void loop() {
-  // Loop is never reached in Deep Sleep mode since setup() runs once per wakeup
+  // Reconnect WiFi if dropped
+  if (WiFi.status() != WL_CONNECTED) {
+    Serial.println("WiFi lost. Reconnecting...");
+    connectWiFi();
+    return;
+  }
+
+  unsigned long now = millis();
+
+  // Check for watering commands every 3 seconds
+  if (now - lastCommandCheck >= COMMAND_INTERVAL) {
+    lastCommandCheck = now;
+    processWateringLogic();
+  }
+
+  // Upload telemetry every 5 seconds
+  if (now - lastTelemetryUpload >= TELEMETRY_INTERVAL) {
+    lastTelemetryUpload = now;
+    sendTelemetryData();
+  }
 }
 
 // ==========================================
