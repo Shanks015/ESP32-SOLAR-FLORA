@@ -1,6 +1,7 @@
 #include <WiFi.h>
 #include <HTTPClient.h>
 #include <ArduinoJson.h>
+#include <WiFiManager.h> // Include WiFiManager Library
 #include "time.h"
 
 // --- Network & Supabase Credentials ---
@@ -33,7 +34,7 @@ void setup() {
   pinMode(motorRelayPin, OUTPUT);
   digitalWrite(motorRelayPin, HIGH); // Relay OFF by default (Active Low)
 
-  // 1. Connect to WiFi
+  // 1. Connect to WiFi using WiFiManager
   connectWiFi();
 
   if (WiFi.status() == WL_CONNECTED) {
@@ -51,7 +52,7 @@ void setup() {
     // 4. Send telemetry update
     sendTelemetryData();
   } else {
-    Serial.println("Skipping network actions because WiFi is offline.");
+    Serial.println("Skipping network actions because WiFi configuration failed or timed out.");
   }
 
   // 5. Enter Deep Sleep (WiFi and CPU turn off completely)
@@ -68,24 +69,22 @@ void loop() {
 }
 
 // ==========================================
-// WIFI CONNECT WITH TIMEOUT FOR POWER SAVINGS
+// WIFI CONNECT VIA WIFIMANAGER PORTAL
 // ==========================================
 void connectWiFi() {
-  WiFi.begin(ssid, password);
-  Serial.print("Connecting to WiFi");
-  
-  int attempts = 0;
-  // Timeout after 15 seconds to prevent battery drain if WiFi is down
-  while (WiFi.status() != WL_CONNECTED && attempts < 30) {
-    delay(500);
-    Serial.print(".");
-    attempts++;
-  }
-  
-  if (WiFi.status() == WL_CONNECTED) {
-    Serial.println("\nConnected to WiFi!");
+  WiFiManager wm;
+
+  // Set timeout of 120 seconds (2 mins) to save battery if router is off
+  wm.setConfigPortalTimeout(120); 
+
+  // Try to connect to saved credentials, or start captive AP named "Solar_Flora_Config"
+  Serial.println("Connecting to WiFi via WiFiManager...");
+  bool res = wm.autoConnect("Solar_Flora_Config");
+
+  if (!res) {
+    Serial.println("WiFi configuration failed or portal timed out.");
   } else {
-    Serial.println("\nWiFi Connection failed/timed out.");
+    Serial.println("Connected to WiFi successfully!");
   }
 }
 
