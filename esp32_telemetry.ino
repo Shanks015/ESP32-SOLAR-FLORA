@@ -11,7 +11,7 @@ const char* deviceId = "ESP32_SOLAR_001";
 
 // --- Hardware Pins ---
 const int batteryPin = 34;   
-const int chargingPin = 35;  
+const int chargingPin = 33;   // Moved from GPIO 35 (no pull-up support) to GPIO 33
 const int motorRelayPin = 4; // Assuming GPIO 4 for your water pump relay
 
 // --- Deep Sleep Config ---
@@ -30,7 +30,7 @@ void setup() {
   Serial.println("ESP32 WOKE UP from Deep Sleep Mode!");
   Serial.println("-------------------------------------------");
 
-  pinMode(chargingPin, INPUT);
+  pinMode(chargingPin, INPUT_PULLUP); // Pull-up so CHRG pin reads HIGH when not charging
   pinMode(motorRelayPin, INPUT); // High-impedance state (truly OFF for 5V relays)
 
   // 1. Connect to WiFi using WiFiManager
