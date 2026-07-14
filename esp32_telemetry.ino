@@ -3,7 +3,8 @@
 #include <WiFiClientSecure.h> // Include secure client library
 #include <ArduinoJson.h>
 #include <WiFiManager.h> // Include WiFiManager Library
-#include "time.h"
+#include <Wire.h>
+#include <RTClib.h>
 
 // --- Network & Supabase Credentials ---
 #include "secrets.h" // secrets.h no longer needs SSID and Password!
@@ -27,9 +28,8 @@ unsigned long motorStartTime = 0;
 unsigned long motorDuration = 0; // in milliseconds
 int lastDailyWateringDay = -1;   // Tracks which day daily schedule last fired (-1 = never)
 
-// --- NTP Time Setup ---
-const long gmtOffset_sec = 19800;  // Adjust to your local timezone (e.g. India GMT+5:30 is 19800)
-const int daylightOffset_sec = 0;
+// --- RTC Setup ---
+RTC_DS3231 rtc;
 
 void setup() {
   Serial.begin(115200);
@@ -44,21 +44,15 @@ void setup() {
   // 1. Connect to WiFi using WiFiManager
   connectWiFi();
 
-  if (WiFi.status() == WL_CONNECTED) {
-    // 2. Synchronize Clock with Internet NTP Time
-    configTime(gmtOffset_sec, daylightOffset_sec, "pool.ntp.org", "time.nist.gov");
-    Serial.println("Synchronizing internet time...");
-    struct tm timeinfo;
-    int ntpRetries = 0;
-    while (!getLocalTime(&timeinfo) && ntpRetries < 10) {
-      Serial.print(".");
-      delay(500);
-      ntpRetries++;
-    }
-    if (ntpRetries < 10) {
-      Serial.println(&timeinfo, "\nTime synchronized: %Y-%m-%d %H:%M:%S");
-    } else {
-      Serial.println("\nNTP sync timed out. Continuing anyway.");
+  // 2. Initialize RTC
+  Wire.begin();
+  if (!rtc.begin()) {
+    Serial.println("Couldn't find RTC! Check connections.");
+  } else {
+    Serial.println("RTC initialized successfully.");
+    if (rtc.lostPower()) {
+      Serial.println("RTC lost power, setting time to compile time.");
+      rtc.adjust(DateTime(F(__DATE__), F(__TIME__)));
     }
   }
 }
@@ -161,18 +155,16 @@ void processWateringLogic() {
       } 
       // Check 2: Check daily scheduled watering time
       else if (dailyEnabled) {
-        struct tm timeinfo;
-        if (getLocalTime(&timeinfo)) {
-          char currentTime[6];
-          sprintf(currentTime, "%02d:%02d", timeinfo.tm_hour, timeinfo.tm_min);
-          
-          // Match HH:MM and only trigger once per day
-          if (dailyTime.substring(0, 5) == String(currentTime) &&
-              timeinfo.tm_mday != lastDailyWateringDay) {
-            Serial.println("Daily watering schedule match!");
-            lastDailyWateringDay = timeinfo.tm_mday; // Mark today as done
-            triggerWatering = true;
-          }
+        DateTime nowTime = rtc.now();
+        char currentTime[6];
+        sprintf(currentTime, "%02d:%02d", nowTime.hour(), nowTime.minute());
+        
+        // Match HH:MM and only trigger once per day
+        if (dailyTime.substring(0, 5) == String(currentTime) &&
+            nowTime.day() != lastDailyWateringDay) {
+          Serial.println("Daily watering schedule match!");
+          lastDailyWateringDay = nowTime.day(); // Mark today as done
+          triggerWatering = true;
         }
       }
 
