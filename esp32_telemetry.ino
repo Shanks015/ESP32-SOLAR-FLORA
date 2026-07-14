@@ -1,5 +1,6 @@
 #include <WiFi.h>
 #include <HTTPClient.h>
+#include <WiFiClientSecure.h> // Include secure client library
 #include <ArduinoJson.h>
 #include <WiFiManager.h> // Include WiFiManager Library
 #include "time.h"
@@ -117,11 +118,13 @@ void connectWiFi() {
 // PROCESS MANUAL COMMANDS AND SCHEDULES
 // ==========================================
 void processWateringLogic() {
+  WiFiClientSecure client;
+  client.setInsecure(); // Bypass SSL certificate validation to prevent connection code -1
   HTTPClient http;
   
   // Fetch columns needed for schedules and controls
   String url = String(supabaseUrl) + "/rest/v1/profiles?select=motor_active,daily_watering_enabled,daily_watering_time,watering_duration,sleep_interval&id=eq." + String(userId);
-  http.begin(url);
+  http.begin(client, url);
   
   http.addHeader("apikey", supabaseKey);
   http.addHeader("Authorization", "Bearer " + String(supabaseKey));
@@ -207,9 +210,11 @@ void processWateringLogic() {
 // RESET MOTOR TRIGGER IN DATABASE
 // ==========================================
 void updateDatabaseMotorActive(bool active) {
+  WiFiClientSecure client;
+  client.setInsecure(); // Bypass SSL validation
   HTTPClient http;
   String url = String(supabaseUrl) + "/rest/v1/profiles?id=eq." + String(userId);
-  http.begin(url);
+  http.begin(client, url);
   
   http.addHeader("apikey", supabaseKey);
   http.addHeader("Authorization", "Bearer " + String(supabaseKey));
@@ -236,9 +241,11 @@ void updateDatabaseMotorActive(bool active) {
 // SEND TELEMETRY TO DATABASE
 // ==========================================
 void sendTelemetryData() {
+  WiFiClientSecure client;
+  client.setInsecure(); // Bypass SSL validation
   HTTPClient http;
   String url = String(supabaseUrl) + "/rest/v1/telemetry";
-  http.begin(url);
+  http.begin(client, url);
 
   http.addHeader("apikey", supabaseKey);
   http.addHeader("Authorization", "Bearer " + String(supabaseKey));
