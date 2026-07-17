@@ -230,10 +230,12 @@ class _LoginPageState extends State<LoginPage> {
                     ],
                   ),
                   child: Center(
-                    child: Icon(
-                      Icons.wb_sunny_outlined,
-                      size: 50,
-                      color: primaryColor,
+                    child: Padding(
+                      padding: const EdgeInsets.all(12.0),
+                      child: Image.asset(
+                        'assets/brand/brand_logo.png',
+                        fit: BoxFit.contain,
+                      ),
                     ),
                   ),
                 ),
