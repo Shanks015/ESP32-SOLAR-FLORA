@@ -15,7 +15,10 @@ class SupabaseService {
   final firebase.FirebaseAuth _firebaseAuth = firebase.FirebaseAuth.instance;
   final GoogleSignIn _googleSignIn = GoogleSignIn();
 
-  // Initialize Supabase (initialized in main.dart)
+  // Shared ID used by both the app and the ESP32 to represent the shared device
+  static const String sharedDeviceId = "shared_device_001";
+
+  // Initialize Supabase
   Future<void> initialize() async {
     await supabase.Supabase.initialize(
       url: dotenv.env['SUPABASE_URL'] ?? '',
@@ -39,8 +42,8 @@ class SupabaseService {
       final firebase.User? user = userCredential.user;
 
       if (user != null) {
-        // Automatically sync or create profile in Supabase
-        await createUserProfileIfNotExist(user.uid, user.email, user.displayName);
+        // Automatically sync or create the shared profile in Supabase
+        await createUserProfileIfNotExist(sharedDeviceId, "shared@solak.app", "Solak System");
         return AppUser(id: user.uid, email: user.email);
       }
       return null;
@@ -58,7 +61,7 @@ class SupabaseService {
     );
     final user = credential.user;
     if (user != null) {
-      await createUserProfileIfNotExist(user.uid, user.email, null);
+      await createUserProfileIfNotExist(sharedDeviceId, "shared@solak.app", "Solak System");
       return AppUser(id: user.uid, email: user.email);
     }
     return null;
@@ -72,7 +75,7 @@ class SupabaseService {
     );
     final user = credential.user;
     if (user != null) {
-      await createUserProfileIfNotExist(user.uid, user.email, null);
+      await createUserProfileIfNotExist(sharedDeviceId, "shared@solak.app", "Solak System");
       return AppUser(id: user.uid, email: user.email);
     }
     return null;
@@ -93,15 +96,15 @@ class SupabaseService {
     return null;
   }
 
-  // Automatically provision user profile row in Supabase if it doesn't exist
+  // Automatically provision the shared profile row in Supabase if it doesn't exist
   Future<void> createUserProfileIfNotExist(String uid, String? email, String? fullName) async {
     try {
-      final profile = await getProfile(uid);
+      final profile = await getProfile(sharedDeviceId);
       if (profile == null) {
         await _supabase.from('profiles').insert({
-          'id': uid,
+          'id': sharedDeviceId,
           'email': email,
-          'full_name': fullName ?? email?.split('@').first ?? 'Plant Caretaker',
+          'full_name': fullName ?? "Solak System",
           'number_of_plants': 3,
           'dark_mode': false,
           'notifications': true,
@@ -112,7 +115,7 @@ class SupabaseService {
           'watering_duration': 15,
           'sleep_interval': 600,
         });
-        print('Created new profile for user: $uid');
+        print('Created shared profile row: $sharedDeviceId');
       }
     } catch (e) {
       print('Error creating profile: $e');
@@ -125,7 +128,7 @@ class SupabaseService {
       final response = await _supabase
           .from('profiles')
           .select()
-          .eq('id', userId)
+          .eq('id', sharedDeviceId)
           .single();
 
       return response;
@@ -137,13 +140,10 @@ class SupabaseService {
 
   // Update profile (Real Database query)
   Future<void> updateProfile(Map<String, dynamic> updates) async {
-    final userId = getCurrentUser()?.id;
-    if (userId == null) throw Exception('No authenticated user');
-
     await _supabase
         .from('profiles')
         .update(updates)
-        .eq('id', userId);
+        .eq('id', sharedDeviceId);
   }
 
   // Insert telemetry (for ESP32 to call)
@@ -153,10 +153,7 @@ class SupabaseService {
 
   // Get latest telemetry for current user
   Future<Map<String, dynamic>?> getTelemetry() async {
-    final userId = getCurrentUser()?.id;
-    if (userId == null) throw Exception('No authenticated user');
-
-    return getLatestTelemetry(userId);
+    return getLatestTelemetry(sharedDeviceId);
   }
 
   // Get latest telemetry for a specific user ID (Real Database query)
@@ -165,7 +162,7 @@ class SupabaseService {
       final response = await _supabase
           .from('telemetry')
           .select()
-          .eq('user_id', userId)
+          .eq('user_id', sharedDeviceId)
           .order('created_at', ascending: false)
           .limit(1)
           .single();
@@ -179,10 +176,7 @@ class SupabaseService {
 
   // Upload avatar to storage
   Future<String?> uploadAvatar(String filePath) async {
-    final userId = getCurrentUser()?.id;
-    if (userId == null) throw Exception('No authenticated user');
-
-    final fileName = 'avatar_$userId.jpg';
+    final fileName = 'avatar_$sharedDeviceId.jpg';
     try {
       await _supabase.storage
           .from('avatars')
