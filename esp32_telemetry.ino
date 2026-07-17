@@ -136,7 +136,7 @@ class MyServerCallbacks: public BLEServerCallbacks {
 
 class BLEWiFiCallbacks: public BLECharacteristicCallbacks {
     void onWrite(BLECharacteristic *pCharacteristic) {
-      std::string value = pCharacteristic->getValue();
+      String value = pCharacteristic->getValue().c_str();
       if (value.length() > 0) {
         Serial.println("Received WiFi configuration over BLE!");
         

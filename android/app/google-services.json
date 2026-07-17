@@ -12,7 +12,20 @@
           "package_name": "com.solak.app"
         }
       },
-      "oauth_client": [],
+      "oauth_client": [
+        {
+          "client_id": "124034724254-a66jgg3trduck7g9t6qq19hpgo61tgk7.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.solak.app",
+            "certificate_hash": "389227fe38168e328fd8632570ad115a4f5aa890"
+          }
+        },
+        {
+          "client_id": "124034724254-gc90loniqoe6qjt4ufij40uvae7rc098.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
       "api_key": [
         {
           "current_key": "AIzaSyBAXd9c4S-BHxqGMAk4rG7KRWrgfos3i7o"
@@ -20,7 +33,12 @@
       ],
       "services": {
         "appinvite_service": {
-          "other_platform_oauth_client": []
+          "other_platform_oauth_client": [
+            {
+              "client_id": "124034724254-gc90loniqoe6qjt4ufij40uvae7rc098.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
         }
       }
     }
