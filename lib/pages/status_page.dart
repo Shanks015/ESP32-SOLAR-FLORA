@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../services/supabase_service.dart';
 import '../widgets/custom_widgets.dart';
+import '../widgets/wifi_config_dialog.dart';
 
 class StatusPage extends StatefulWidget {
   const StatusPage({Key? key}) : super(key: key);
@@ -494,18 +495,48 @@ class _StatusPageState extends State<StatusPage> with TickerProviderStateMixin {
                                 borderRadius: BorderRadius.circular(12),
                                 border: Border.all(color: const Color(0xFFFFB4AB)),
                               ),
-                              child: Row(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  const Icon(Icons.warning_amber_rounded, color: Color(0xFF410002)),
-                                  const SizedBox(width: 12),
-                                  Expanded(
-                                    child: Text(
-                                      'Device is offline. Controls are disabled until the device wakes up and reconnects.',
-                                      style: GoogleFonts.manrope(
-                                        fontSize: 12,
-                                        color: const Color(0xFF410002),
-                                        fontWeight: FontWeight.w600,
+                                  Row(
+                                    children: [
+                                      const Icon(Icons.warning_amber_rounded, color: Color(0xFF410002)),
+                                      const SizedBox(width: 12),
+                                      Expanded(
+                                        child: Text(
+                                          'Device is offline. Controls are disabled until the device wakes up and reconnects.',
+                                          style: GoogleFonts.manrope(
+                                            fontSize: 12,
+                                            color: const Color(0xFF410002),
+                                            fontWeight: FontWeight.w600,
+                                          ),
+                                        ),
                                       ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 8),
+                                  InkWell(
+                                    onTap: () {
+                                      showDialog(
+                                        context: context,
+                                        builder: (context) => const WifiConfigDialog(),
+                                      );
+                                    },
+                                    child: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        const Icon(Icons.bluetooth, size: 16, color: Color(0xFF410002)),
+                                        const SizedBox(width: 6),
+                                        Text(
+                                          'Configure WiFi via Bluetooth',
+                                          style: GoogleFonts.manrope(
+                                            fontSize: 12,
+                                            fontWeight: FontWeight.w800,
+                                            color: const Color(0xFF410002),
+                                            decoration: TextDecoration.underline,
+                                          ),
+                                        ),
+                                      ],
                                     ),
                                   ),
                                 ],

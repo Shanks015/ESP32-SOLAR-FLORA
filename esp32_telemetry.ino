@@ -2,9 +2,13 @@
 #include <HTTPClient.h>
 #include <WiFiClientSecure.h> // Include secure client library
 #include <ArduinoJson.h>
-#include <WiFiManager.h> // Include WiFiManager Library
 #include <Wire.h>
 #include <RTClib.h>
+#include <Preferences.h>
+#include <BLEDevice.h>
+#include <BLEServer.h>
+#include <BLEUtils.h>
+#include <BLE2902.h>
 
 // --- Network & Supabase Credentials ---
 #include "secrets.h" // secrets.h no longer needs SSID and Password!
@@ -30,6 +34,13 @@ int lastDailyWateringDay = -1;   // Tracks which day daily schedule last fired (
 
 // --- RTC Setup ---
 RTC_DS3231 rtc;
+
+// --- BLE Configuration Globals ---
+BLEServer* pServer = NULL;
+BLECharacteristic* pWriteCharacteristic = NULL;
+BLECharacteristic* pStatusCharacteristic = NULL;
+bool bleConfigCompleted = false;
+bool deviceConnected = false;
 
 void setup() {
   Serial.begin(115200);
@@ -88,24 +99,163 @@ void loop() {
   }
 }
 
-// ==========================================
-// WIFI CONNECT VIA WIFIMANAGER PORTAL
-// ==========================================
-void connectWiFi() {
-  WiFiManager wm;
+// --- Persistent Credentials Storage ---
+Preferences preferences;
 
-  // Set timeout of 120 seconds (2 mins) to save battery if router is off
-  wm.setConfigPortalTimeout(120); 
+void loadWiFiCredentials(String &ssid, String &password) {
+  preferences.begin("solak-wifi", true);
+  ssid = preferences.getString("ssid", "");
+  password = preferences.getString("password", "");
+  preferences.end();
+}
 
-  // Try to connect to saved credentials, or start captive AP named "Solak_Config"
-  Serial.println("Connecting to WiFi via WiFiManager...");
-  bool res = wm.autoConnect("Solak_Config");
+void saveWiFiCredentials(String ssid, String password) {
+  preferences.begin("solak-wifi", false);
+  preferences.putString("ssid", ssid);
+  preferences.putString("password", password);
+  preferences.end();
+}
 
-  if (!res) {
-    Serial.println("WiFi configuration failed or portal timed out.");
-  } else {
-    Serial.println("Connected to WiFi successfully!");
+// --- BLE Callbacks ---
+#define SERVICE_UUID        "4fafc201-1fb5-459e-8fcc-c5c9c331914b"
+#define WRITE_UUID          "beb5483e-36e1-4688-b7f5-ea07361b26a8"
+#define STATUS_UUID         "beb5483e-36e1-4688-b7f5-ea07361b26a9"
+
+class MyServerCallbacks: public BLEServerCallbacks {
+    void onConnect(BLEServer* pServer) {
+      deviceConnected = true;
+      Serial.println("App connected via Bluetooth!");
+    }
+    void onDisconnect(BLEServer* pServer) {
+      deviceConnected = false;
+      Serial.println("App disconnected from Bluetooth!");
+      // Restart advertising so other attempts can connect
+      BLEDevice::startAdvertising();
+    }
+};
+
+class BLEWiFiCallbacks: public BLECharacteristicCallbacks {
+    void onWrite(BLECharacteristic *pCharacteristic) {
+      std::string value = pCharacteristic->getValue();
+      if (value.length() > 0) {
+        Serial.println("Received WiFi configuration over BLE!");
+        
+        #if ARDUINOJSON_VERSION_MAJOR >= 7
+        JsonDocument doc;
+        #else
+        DynamicJsonDocument doc(512);
+        #endif
+        DeserializationError error = deserializeJson(doc, value.c_str());
+        
+        if (!error) {
+          String ssid = doc["ssid"] | "";
+          String pass = doc["pass"] | "";
+          
+          if (ssid.length() > 0) {
+            Serial.print("Connecting to WiFi SSID: ");
+            Serial.println(ssid);
+            
+            pStatusCharacteristic->setValue("CONNECTING");
+            pStatusCharacteristic->notify();
+            
+            WiFi.disconnect();
+            WiFi.begin(ssid.c_str(), pass.c_str());
+            
+            int retries = 0;
+            while (WiFi.status() != WL_CONNECTED && retries < 30) {
+              delay(500);
+              Serial.print(".");
+              retries++;
+            }
+            
+            if (WiFi.status() == WL_CONNECTED) {
+              Serial.println("\nWiFi connected successfully!");
+              saveWiFiCredentials(ssid, pass);
+              pStatusCharacteristic->setValue("CONNECTED");
+              pStatusCharacteristic->notify();
+              delay(1000);
+              bleConfigCompleted = true;
+            } else {
+              Serial.println("\nWiFi connection failed!");
+              pStatusCharacteristic->setValue("FAILED");
+              pStatusCharacteristic->notify();
+            }
+          }
+        }
+      }
+    }
+};
+
+void startBLEOnboarding() {
+  Serial.println("Starting BLE Onboarding Mode...");
+  
+  BLEDevice::init("Solak_Config");
+  pServer = BLEDevice::createServer();
+  pServer->setCallbacks(new MyServerCallbacks());
+  
+  BLEService *pService = pServer->createService(SERVICE_UUID);
+  
+  pWriteCharacteristic = pService->createCharacteristic(
+    WRITE_UUID,
+    BLECharacteristic::PROPERTY_WRITE
+  );
+  pWriteCharacteristic->setCallbacks(new BLEWiFiCallbacks());
+  
+  pStatusCharacteristic = pService->createCharacteristic(
+    STATUS_UUID,
+    BLECharacteristic::PROPERTY_READ | BLECharacteristic::PROPERTY_NOTIFY
+  );
+  pStatusCharacteristic->addDescriptor(new BLE2902());
+  pStatusCharacteristic->setValue("IDLE");
+  
+  pService->start();
+  
+  BLEAdvertising *pAdvertising = BLEDevice::getAdvertising();
+  pAdvertising->addServiceUUID(SERVICE_UUID);
+  pAdvertising->setScanResponse(true);
+  pAdvertising->setMinPreferred(0x06);  // helper for iOS connection speed
+  pAdvertising->setMinPreferred(0x12);
+  
+  BLEDevice::startAdvertising();
+  Serial.println("BLE advertising as 'Solak_Config'. Connect using the mobile app.");
+  
+  // Wait until configuration is successfully completed
+  while (!bleConfigCompleted) {
+    delay(500);
   }
+  
+  // Clean up BLE to free up memory and radio
+  Serial.println("Stopping BLE config server...");
+  BLEDevice::deinit(true);
+}
+
+void connectWiFi() {
+  String ssid = "";
+  String password = "";
+  loadWiFiCredentials(ssid, password);
+  
+  if (ssid.length() > 0) {
+    Serial.print("Connecting to saved WiFi: ");
+    Serial.println(ssid);
+    WiFi.begin(ssid.c_str(), password.c_str());
+    
+    int retries = 0;
+    while (WiFi.status() != WL_CONNECTED && retries < 20) {
+      delay(500);
+      Serial.print(".");
+      retries++;
+    }
+    
+    if (WiFi.status() == WL_CONNECTED) {
+      Serial.println("\nConnected to saved WiFi successfully!");
+      return;
+    } else {
+      Serial.println("\nFailed to connect to saved WiFi.");
+    }
+  }
+  
+  // If no credentials or connection failed, enter BLE Onboarding
+  startBLEOnboarding();
 }
 
 // ==========================================
