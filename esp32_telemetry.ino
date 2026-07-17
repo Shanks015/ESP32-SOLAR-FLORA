@@ -36,7 +36,7 @@ void setup() {
   delay(500);
   
   Serial.println("\n-------------------------------------------");
-  Serial.println("ESP32 Solar Flora - Continuous Mode");
+  Serial.println("ESP32 Solak - Continuous Mode");
   Serial.println("-------------------------------------------");
 
   pinMode(motorRelayPin, INPUT); // High-impedance state (truly OFF for 5V relays)
@@ -97,9 +97,9 @@ void connectWiFi() {
   // Set timeout of 120 seconds (2 mins) to save battery if router is off
   wm.setConfigPortalTimeout(120); 
 
-  // Try to connect to saved credentials, or start captive AP named "Solar_Flora_Config"
+  // Try to connect to saved credentials, or start captive AP named "Solak_Config"
   Serial.println("Connecting to WiFi via WiFiManager...");
-  bool res = wm.autoConnect("Solar_Flora_Config");
+  bool res = wm.autoConnect("Solak_Config");
 
   if (!res) {
     Serial.println("WiFi configuration failed or portal timed out.");

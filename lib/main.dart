@@ -40,7 +40,7 @@ class MyApp extends StatelessWidget {
       valueListenable: themeModeNotifier,
       builder: (context, currentThemeMode, child) {
         return MaterialApp(
-          title: 'Solar Flora',
+          title: 'Solak',
           debugShowCheckedModeBanner: false,
           themeMode: currentThemeMode,
           theme: ThemeData(

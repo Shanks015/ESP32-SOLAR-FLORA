@@ -441,7 +441,7 @@ class _StatusPageState extends State<StatusPage> with TickerProviderStateMixin {
 
     return Scaffold(
       backgroundColor: scaffoldBg,
-      appBar: const CustomAppBar(title: 'Solar Flora'),
+      appBar: const CustomAppBar(title: 'Solak'),
       body: AmbientShaderBackground(
         isCharging: _isCharging,
         child: Stack(

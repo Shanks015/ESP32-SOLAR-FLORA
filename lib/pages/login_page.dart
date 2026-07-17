@@ -241,7 +241,7 @@ class _LoginPageState extends State<LoginPage> {
 
                 // App Name
                 Text(
-                  'Solar Flora',
+                  'Solak',
                   style: GoogleFonts.manrope(
                     fontSize: 32,
                     fontWeight: FontWeight.w700,

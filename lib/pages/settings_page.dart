@@ -252,7 +252,7 @@ class _SettingsPageState extends State<SettingsPage> {
 
     return Scaffold(
       backgroundColor: isDark ? const Color(0xFF0F1813) : const Color(0xFFF1FCF1),
-      appBar: const CustomAppBar(title: 'Solar Flora'),
+      appBar: const CustomAppBar(title: 'Solak'),
       body: AmbientShaderBackground(
         isCharging: false,
         child: SafeArea(

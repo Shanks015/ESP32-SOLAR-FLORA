@@ -92,7 +92,7 @@ class _EnergyPageState extends State<EnergyPage> with TickerProviderStateMixin {
 
     return Scaffold(
       backgroundColor: scaffoldBg,
-      appBar: const CustomAppBar(title: 'Solar Flora'),
+      appBar: const CustomAppBar(title: 'Solak'),
       body: AmbientShaderBackground(
         isCharging: _isCharging,
         child: SafeArea(
