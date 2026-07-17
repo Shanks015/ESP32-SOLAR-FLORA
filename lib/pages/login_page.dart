@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:firebase_auth/firebase_auth.dart' as fb_auth;
 import '../services/supabase_service.dart';
 
 class LoginPage extends StatefulWidget {
@@ -73,8 +73,8 @@ class _LoginPageState extends State<LoginPage> {
           _isLoading = false;
         });
         String message = 'Sign in failed.';
-        if (e is AuthException) {
-          message = e.message;
+        if (e is fb_auth.FirebaseAuthException) {
+          message = e.message ?? 'An error occurred during authentication.';
         } else {
           message = e.toString();
         }
@@ -138,14 +138,56 @@ class _LoginPageState extends State<LoginPage> {
           _isLoading = false;
         });
         String message = 'Account creation failed.';
-        if (e is AuthException) {
-          message = e.message;
+        if (e is fb_auth.FirebaseAuthException) {
+          message = e.message ?? 'An error occurred during account creation.';
         } else {
           message = e.toString();
         }
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(message, style: GoogleFonts.manrope()),
+            backgroundColor: const Color(0xFFBA1A1A),
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _handleGoogleSignIn() async {
+    setState(() {
+      _isLoading = true;
+    });
+
+    try {
+      final user = await _supabaseService.signInWithGoogle();
+
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+
+        if (user != null) {
+          Navigator.of(context).pushReplacementNamed('/status');
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                'Google sign-in canceled or failed.',
+                style: GoogleFonts.manrope(),
+              ),
+              backgroundColor: const Color(0xFFBA1A1A),
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(e.toString(), style: GoogleFonts.manrope()),
             backgroundColor: const Color(0xFFBA1A1A),
           ),
         );
@@ -365,7 +407,7 @@ class _LoginPageState extends State<LoginPage> {
                 ),
                 const SizedBox(height: 16),
 
-                // Continue with Google (Placeholder / Inactive)
+                // Continue with Google
                 Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
@@ -395,17 +437,17 @@ class _LoginPageState extends State<LoginPage> {
                 const SizedBox(height: 20),
 
                 OutlinedButton.icon(
-                  onPressed: null, // Google sign in is postponed
+                  onPressed: _isLoading ? null : _handleGoogleSignIn,
                   icon: const Icon(Icons.login, size: 18),
                   label: Text(
-                    'Continue with Google (Coming Soon)',
+                    'Continue with Google',
                     style: GoogleFonts.manrope(
                       fontSize: 14,
                       fontWeight: FontWeight.w500,
                     ),
                   ),
                   style: OutlinedButton.styleFrom(
-                    foregroundColor: const Color(0xFF727875),
+                    foregroundColor: textColor,
                     side: BorderSide(color: isDark ? const Color(0xFF2A3D31) : const Color(0xFFDAE6DB)),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(27),

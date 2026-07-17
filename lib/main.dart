@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_auth/firebase_auth.dart' as fb_auth;
 import 'pages/settings_page.dart';
 import 'pages/status_page.dart';
 import 'pages/energy_page.dart';
@@ -13,6 +15,9 @@ final ValueNotifier<ThemeMode> themeModeNotifier = ValueNotifier(ThemeMode.light
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // Initialize Firebase using native config files (google-services.json / GoogleService-Info.plist)
+  await Firebase.initializeApp();
 
   // Load the environment variables file
   await dotenv.load(fileName: ".env");
@@ -72,9 +77,7 @@ class MyApp extends StatelessWidget {
             ),
             dividerColor: const Color(0xFF2A3D31),
           ),
-          home: const Scaffold(
-            body: LoginPage(),
-          ),
+          home: const AuthGate(),
           routes: {
             '/status': (context) => const StatusPage(),
             '/energy': (context) => const EnergyPage(),
@@ -82,6 +85,32 @@ class MyApp extends StatelessWidget {
             '/login': (context) => const LoginPage(),
           },
         );
+      },
+    );
+  }
+}
+
+class AuthGate extends StatelessWidget {
+  const AuthGate({Key? key}) : super(key: key);
+
+  @override
+  Widget build(BuildContext context) {
+    return StreamBuilder<fb_auth.User?>(
+      stream: fb_auth.FirebaseAuth.instance.authStateChanges(),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Scaffold(
+            body: Center(
+              child: CircularProgressIndicator(
+                valueColor: AlwaysStoppedAnimation(Color(0xFF4F635B)),
+              ),
+            ),
+          );
+        }
+        if (snapshot.hasData) {
+          return const StatusPage();
+        }
+        return const LoginPage();
       },
     );
   }
