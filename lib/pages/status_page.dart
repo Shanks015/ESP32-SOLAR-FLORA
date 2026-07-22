@@ -27,13 +27,7 @@ class _StatusPageState extends State<StatusPage> with TickerProviderStateMixin {
   Duration _remainingTime = Duration.zero;
   int _timerTotalSeconds = 60; // Total countdown duration
 
-  // Pulse animation for solar glow
-  late final AnimationController _pulseController;
-  late final Animation<double> _pulseAnimation;
 
-  // Flow animation for connector line
-  late final AnimationController _flowController;
-  late final Animation<double> _flowAnimation;
 
   // Telemetry state
   int _batteryPercentage = 85;
@@ -44,6 +38,7 @@ class _StatusPageState extends State<StatusPage> with TickerProviderStateMixin {
   // Device connectivity states
   bool _isDeviceOnline = false;
   String _lastSeenText = 'Never';
+  int _sleepInterval = 600; // default to 10 minutes
 
   // Daily watering schedule states
   bool _dailyWateringEnabled = false;
@@ -53,21 +48,7 @@ class _StatusPageState extends State<StatusPage> with TickerProviderStateMixin {
   void initState() {
     super.initState();
 
-    _pulseController = AnimationController(
-      duration: const Duration(milliseconds: 1500),
-      vsync: this,
-    )..repeat(reverse: true);
 
-    _pulseAnimation = Tween<double>(begin: 0.9, end: 1.15).animate(
-      CurvedAnimation(parent: _pulseController, curve: Curves.easeInOut),
-    );
-
-    _flowController = AnimationController(
-      duration: const Duration(seconds: 2),
-      vsync: this,
-    )..repeat();
-
-    _flowAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(_flowController);
 
     _loadTelemetry();
     // Poll telemetry & schedule details from Supabase every 5 seconds (real-time)
@@ -78,8 +59,7 @@ class _StatusPageState extends State<StatusPage> with TickerProviderStateMixin {
 
   @override
   void dispose() {
-    _pulseController.dispose();
-    _flowController.dispose();
+
     _wateringTimer?.cancel();
     _countdownTimer?.cancel();
     _telemetryTimer?.cancel();
@@ -113,8 +93,11 @@ class _StatusPageState extends State<StatusPage> with TickerProviderStateMixin {
               final now = DateTime.now();
               final diff = now.difference(lastSeen);
               
-              // ESP32 uploads every 5 seconds. If no update for 12 seconds, it is offline.
-              _isDeviceOnline = diff.inSeconds <= 12;
+              // ESP32 uploads every 5 seconds or goes to sleep for _sleepInterval seconds.
+              // If the sleep interval is > 12 seconds (deep sleep), use _sleepInterval + 60s buffer.
+              // Otherwise, if active real-time mode, check within 12 seconds.
+              final timeout = _sleepInterval > 12 ? _sleepInterval + 60 : 12;
+              _isDeviceOnline = diff.inSeconds <= timeout;
               if (!_isDeviceOnline) {
                 _isCharging = false;
               }
@@ -153,6 +136,7 @@ class _StatusPageState extends State<StatusPage> with TickerProviderStateMixin {
             _wateringDuration = profile['watering_duration'] ?? 15;
             _dailyWateringEnabled = profile['daily_watering_enabled'] ?? false;
             _dailyWateringTime = profile['daily_watering_time'] ?? '08:00:00';
+            _sleepInterval = profile['sleep_interval'] ?? 600;
 
             final scheduledTimeStr = profile['scheduled_watering_time'];
             if (scheduledTimeStr != null) {
@@ -436,10 +420,6 @@ class _StatusPageState extends State<StatusPage> with TickerProviderStateMixin {
     final Color textMain = isDark ? const Color(0xFFE0EAE1) : const Color(0xFF141E17);
     final Color textSecondary = isDark ? const Color(0xFF8B9B90) : const Color(0xFF424845);
     final Color primaryColor = isDark ? const Color(0xFFB6CBC2) : const Color(0xFF4F635B);
-    final Color flowLineColor = _isCharging 
-        ? const Color(0xFF41B883) 
-        : (isDark ? const Color(0xFF8B9B90) : const Color(0xFF4F635B));
-
     return Scaffold(
       backgroundColor: scaffoldBg,
       appBar: const CustomAppBar(title: 'Solak'),
@@ -567,10 +547,44 @@ class _StatusPageState extends State<StatusPage> with TickerProviderStateMixin {
                                   Center(
                                     child: ClipOval(
                                       child: Image.network(
-                                        'https://images.unsplash.com/photo-1509440159596-0249088772ff?q=80&w=300&auto=format&fit=crop',
+                                        'https://images.unsplash.com/photo-1463936575829-25148e1db1b8?q=80&w=300&auto=format&fit=crop',
                                         width: 220,
                                         height: 220,
                                         fit: BoxFit.cover,
+                                        errorBuilder: (context, error, stackTrace) {
+                                          return Container(
+                                            width: 220,
+                                            height: 220,
+                                            decoration: const BoxDecoration(
+                                              gradient: LinearGradient(
+                                                colors: [
+                                                  Color(0xFFE8F5E9),
+                                                  Color(0xFFC8E6C9),
+                                                ],
+                                                begin: Alignment.topLeft,
+                                                end: Alignment.bottomRight,
+                                              ),
+                                            ),
+                                            child: const Icon(
+                                              Icons.local_florist,
+                                              size: 80,
+                                              color: Color(0xFF4F635B),
+                                            ),
+                                          );
+                                        },
+                                        loadingBuilder: (context, child, loadingProgress) {
+                                          if (loadingProgress == null) return child;
+                                          return Container(
+                                            width: 220,
+                                            height: 220,
+                                            color: isDark ? const Color(0xFF16221A) : const Color(0xFFF1FCF1),
+                                            child: const Center(
+                                              child: CircularProgressIndicator(
+                                                valueColor: AlwaysStoppedAnimation(Color(0xFF4F635B)),
+                                              ),
+                                            ),
+                                          );
+                                        },
                                       ),
                                     ),
                                   ),
@@ -883,156 +897,7 @@ class _StatusPageState extends State<StatusPage> with TickerProviderStateMixin {
                               ],
                             ),
                           ),
-                          const SizedBox(height: 24),
 
-                          // Indicators Section (Power Flow)
-                          Container(
-                            padding: const EdgeInsets.all(20.0),
-                            decoration: BoxDecoration(
-                              color: cardColor,
-                              borderRadius: BorderRadius.circular(16),
-                              border: Border.all(color: borderColor),
-                            ),
-                            child: Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                // Solar panel widget
-                                Column(
-                                  children: [
-                                    Stack(
-                                      alignment: Alignment.center,
-                                      children: [
-                                        ScaleTransition(
-                                          scale: _pulseAnimation,
-                                          child: Container(
-                                            width: 48,
-                                            height: 48,
-                                            decoration: BoxDecoration(
-                                              shape: BoxShape.circle,
-                                              color: isDark ? const Color(0xFF25394B) : const Color(0xFFD0E1F9),
-                                            ),
-                                          ),
-                                        ),
-                                        Icon(
-                                          Icons.wb_sunny,
-                                          color: isDark ? const Color(0xFF8B9B90) : const Color(0xFF4F6074),
-                                          size: 28,
-                                        ),
-                                      ],
-                                    ),
-                                    const SizedBox(height: 8),
-                                    Text(
-                                      'SOLAR',
-                                      style: GoogleFonts.manrope(
-                                        fontSize: 11,
-                                        fontWeight: FontWeight.w700,
-                                        color: textSecondary,
-                                        letterSpacing: 0.5,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-
-                                // Animated flow connector
-                                Expanded(
-                                  child: Container(
-                                    height: 4,
-                                    margin: const EdgeInsets.symmetric(horizontal: 16),
-                                    decoration: BoxDecoration(
-                                      color: isDark ? const Color(0xFF2A3D31) : const Color(0xFFDAE6DB),
-                                      borderRadius: BorderRadius.circular(2),
-                                    ),
-                                    child: AnimatedBuilder(
-                                      animation: _flowAnimation,
-                                      builder: (context, child) {
-                                        return FractionallySizedBox(
-                                          alignment: Alignment.centerLeft,
-                                          widthFactor: 1.0,
-                                          child: LayoutBuilder(
-                                            builder: (context, constraints) {
-                                              return CustomPaint(
-                                                painter: _FlowLinePainter(
-                                                  progress: _flowAnimation.value,
-                                                  color: flowLineColor,
-                                                ),
-                                              );
-                                            },
-                                          ),
-                                        );
-                                      },
-                                    ),
-                                  ),
-                                ),
-
-                                // Battery Widget
-                                Column(
-                                  children: [
-                                    Container(
-                                      width: 48,
-                                      height: 48,
-                                      decoration: BoxDecoration(
-                                        shape: BoxShape.circle,
-                                        color: isDark ? const Color(0xFF1E3226) : const Color(0xFFDFEBE0),
-                                        boxShadow: [
-                                          BoxShadow(
-                                            color: Colors.black.withOpacity(0.02),
-                                            blurRadius: 4,
-                                          ),
-                                        ],
-                                      ),
-                                      child: Center(
-                                        child: Container(
-                                          width: 14,
-                                          height: 24,
-                                          decoration: BoxDecoration(
-                                            border: Border.all(color: textSecondary, width: 1.5),
-                                            borderRadius: BorderRadius.circular(2),
-                                          ),
-                                          padding: const EdgeInsets.all(1.5),
-                                          child: Align(
-                                            alignment: Alignment.bottomCenter,
-                                            child: Container(
-                                              width: double.infinity,
-                                              height: 18 * (_batteryPercentage / 100.0),
-                                              decoration: BoxDecoration(
-                                                color: flowLineColor,
-                                                borderRadius: BorderRadius.circular(0.5),
-                                              ),
-                                            ),
-                                          ),
-                                        ),
-                                      ),
-                                    ),
-                                    const SizedBox(height: 6),
-                                    Row(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        if (_isCharging)
-                                          const Icon(Icons.flash_on, size: 12, color: Colors.amber),
-                                        Text(
-                                          '$_batteryPercentage%',
-                                          style: GoogleFonts.manrope(
-                                            fontSize: 11,
-                                            fontWeight: FontWeight.w800,
-                                            color: textMain,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                    Text(
-                                      _isCharging ? 'CHARGING' : 'BATTERY',
-                                      style: GoogleFonts.manrope(
-                                        fontSize: 9,
-                                        fontWeight: FontWeight.w700,
-                                        color: textSecondary,
-                                        letterSpacing: 0.5,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ],
-                            ),
-                          ),
                         ],
                       ),
                     ),
@@ -1048,32 +913,4 @@ class _StatusPageState extends State<StatusPage> with TickerProviderStateMixin {
       ),
     );
   }
-}
-
-class _FlowLinePainter extends CustomPainter {
-  final double progress;
-  final Color color;
-
-  _FlowLinePainter({required this.progress, required this.color});
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final paint = Paint()
-      ..color = color
-      ..strokeWidth = 4.0
-      ..strokeCap = StrokeCap.round;
-
-    final double startX = size.width * progress;
-    final double dashWidth = 12.0;
-
-    canvas.drawLine(
-      Offset(startX % size.width, size.height / 2),
-      Offset((startX + dashWidth) % size.width, size.height / 2),
-      paint,
-    );
-  }
-
-  @override
-  bool shouldRepaint(covariant _FlowLinePainter oldDelegate) =>
-      oldDelegate.progress != progress || oldDelegate.color != color;
 }

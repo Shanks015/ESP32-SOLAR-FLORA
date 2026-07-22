@@ -19,6 +19,7 @@ class _SettingsPageState extends State<SettingsPage> {
   Map<String, dynamic>? _profileData;
   bool _isLoading = true;
   bool _isAvatarUploading = false;
+  bool _isPickingImage = false;
   String _userId = '';
   String _fullName = 'Plant Caretaker';
   String _email = 'flora.user@gmail.com';
@@ -104,15 +105,30 @@ class _SettingsPageState extends State<SettingsPage> {
   }
 
   Future<void> _pickAndUploadAvatar() async {
-    if (_isAvatarUploading) return;
+    if (_isAvatarUploading || _isPickingImage) return;
+
+    setState(() {
+      _isPickingImage = true;
+    });
 
     final ImagePicker picker = ImagePicker();
-    final XFile? image = await picker.pickImage(
-      source: ImageSource.gallery,
-      maxWidth: 300,
-      maxHeight: 300,
-      imageQuality: 85,
-    );
+    XFile? image;
+    try {
+      image = await picker.pickImage(
+        source: ImageSource.gallery,
+        maxWidth: 300,
+        maxHeight: 300,
+        imageQuality: 85,
+      );
+    } catch (e) {
+      print('Error picking image: $e');
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isPickingImage = false;
+        });
+      }
+    }
 
     if (image == null) return;
 
@@ -142,9 +158,11 @@ class _SettingsPageState extends State<SettingsPage> {
         );
       }
     } finally {
-      setState(() {
-        _isAvatarUploading = false;
-      });
+      if (mounted) {
+        setState(() {
+          _isAvatarUploading = false;
+        });
+      }
     }
   }
 
@@ -463,11 +481,12 @@ class _SettingsPageState extends State<SettingsPage> {
                         ),
                       ),
                       const SizedBox(height: 12),
-                      Container(
-                        decoration: BoxDecoration(
-                          color: cardColor,
+                      Material(
+                        color: cardColor,
+                        clipBehavior: Clip.antiAlias,
+                        shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(16),
-                          border: Border.all(color: borderColor),
+                          side: BorderSide(color: borderColor),
                         ),
                         child: ListTile(
                           onTap: _updateNumberOfPlants,
@@ -510,11 +529,12 @@ class _SettingsPageState extends State<SettingsPage> {
                         ),
                       ),
                       const SizedBox(height: 12),
-                      Container(
-                        decoration: BoxDecoration(
-                          color: cardColor,
+                      Material(
+                        color: cardColor,
+                        clipBehavior: Clip.antiAlias,
+                        shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(16),
-                          border: Border.all(color: borderColor),
+                          side: BorderSide(color: borderColor),
                         ),
                         child: Column(
                           children: [

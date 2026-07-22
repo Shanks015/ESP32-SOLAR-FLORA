@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -36,15 +37,31 @@ class _WifiConfigDialogState extends State<WifiConfigDialog> {
   StreamSubscription<List<ScanResult>>? _scanSubscription;
   StreamSubscription<BluetoothConnectionState>? _connectionSubscription;
   StreamSubscription<List<int>>? _statusSubscription;
+  BluetoothAdapterState _bluetoothState = BluetoothAdapterState.unknown;
+  StreamSubscription<BluetoothAdapterState>? _adapterStateSubscription;
 
   @override
   void initState() {
     super.initState();
+    // Check initial state synchronously
+    _bluetoothState = FlutterBluePlus.adapterStateNow;
+    // Subscribe to Bluetooth adapter state changes
+    _adapterStateSubscription = FlutterBluePlus.adapterState.listen((state) {
+      if (mounted) {
+        setState(() {
+          _bluetoothState = state;
+          if (state != BluetoothAdapterState.on) {
+            _scanResults.clear();
+          }
+        });
+      }
+    });
     _startScan();
   }
 
   @override
   void dispose() {
+    _adapterStateSubscription?.cancel();
     _scanSubscription?.cancel();
     _connectionSubscription?.cancel();
     _statusSubscription?.cancel();
@@ -56,12 +73,36 @@ class _WifiConfigDialogState extends State<WifiConfigDialog> {
     super.dispose();
   }
 
+  Future<void> _requestEnableBluetooth() async {
+    if (Platform.isAndroid) {
+      try {
+        await FlutterBluePlus.turnOn();
+      } catch (e) {
+        print("Error turning on Bluetooth: $e");
+      }
+    }
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text("Please turn on Bluetooth to connect to the device"),
+          backgroundColor: Color(0xFFBA1A1A),
+        ),
+      );
+    }
+  }
+
   Future<void> _startScan() async {
     // Request Bluetooth and Location checks
     if (await FlutterBluePlus.isSupported == false) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text("Bluetooth is not supported on this device")),
       );
+      return;
+    }
+
+    final adapterState = FlutterBluePlus.adapterStateNow;
+    if (adapterState != BluetoothAdapterState.on) {
+      await _requestEnableBluetooth();
       return;
     }
 
@@ -93,6 +134,12 @@ class _WifiConfigDialogState extends State<WifiConfigDialog> {
   }
 
   Future<void> _connectToDevice(BluetoothDevice device) async {
+    final adapterState = FlutterBluePlus.adapterStateNow;
+    if (adapterState != BluetoothAdapterState.on) {
+      await _requestEnableBluetooth();
+      return;
+    }
+
     setState(() {
       _isConnecting = true;
     });
@@ -253,35 +300,65 @@ class _WifiConfigDialogState extends State<WifiConfigDialog> {
                     border: Border.all(color: Colors.grey.withOpacity(0.3)),
                     borderRadius: BorderRadius.circular(12),
                   ),
-                  child: _isConnecting
-                      ? const Center(
-                          child: CircularProgressIndicator(
-                            valueColor: AlwaysStoppedAnimation(Color(0xFF4F635B)),
+                  child: _bluetoothState != BluetoothAdapterState.on
+                      ? InkWell(
+                          onTap: _requestEnableBluetooth,
+                          borderRadius: BorderRadius.circular(12),
+                          child: Center(
+                            child: Padding(
+                              padding: const EdgeInsets.all(16.0),
+                              child: Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  const Icon(
+                                    Icons.bluetooth_disabled,
+                                    color: Color(0xFFBA1A1A),
+                                    size: 32,
+                                  ),
+                                  const SizedBox(height: 8),
+                                  Text(
+                                    "Bluetooth is turned off. Tap to turn on Bluetooth.",
+                                    textAlign: TextAlign.center,
+                                    style: GoogleFonts.manrope(
+                                      color: const Color(0xFFBA1A1A),
+                                      fontWeight: FontWeight.w600,
+                                      fontSize: 12,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
                           ),
                         )
-                      : _scanResults.isEmpty
-                          ? Center(
-                              child: Text(
-                                _isScanning ? "Scanning..." : "No devices found.",
-                                style: GoogleFonts.manrope(color: Colors.grey),
+                      : _isConnecting
+                          ? const Center(
+                              child: CircularProgressIndicator(
+                                valueColor: AlwaysStoppedAnimation(Color(0xFF4F635B)),
                               ),
                             )
-                          : ListView.builder(
-                              itemCount: _scanResults.length,
-                              itemBuilder: (context, index) {
-                                final result = _scanResults[index];
-                                final name = result.device.platformName;
-                                return ListTile(
-                                  leading: const Icon(Icons.bluetooth),
-                                  title: Text(
-                                    name,
-                                    style: GoogleFonts.manrope(fontWeight: FontWeight.w600, fontSize: 14),
+                          : _scanResults.isEmpty
+                              ? Center(
+                                  child: Text(
+                                    _isScanning ? "Scanning..." : "No devices found.",
+                                    style: GoogleFonts.manrope(color: Colors.grey),
                                   ),
-                                  subtitle: Text(result.device.remoteId.toString(), style: const TextStyle(fontSize: 11)),
-                                  onTap: () => _connectToDevice(result.device),
-                                );
-                              },
-                            ),
+                                )
+                              : ListView.builder(
+                                  itemCount: _scanResults.length,
+                                  itemBuilder: (context, index) {
+                                    final result = _scanResults[index];
+                                    final name = result.device.platformName;
+                                    return ListTile(
+                                      leading: const Icon(Icons.bluetooth),
+                                      title: Text(
+                                        name,
+                                        style: GoogleFonts.manrope(fontWeight: FontWeight.w600, fontSize: 14),
+                                      ),
+                                      subtitle: Text(result.device.remoteId.toString(), style: const TextStyle(fontSize: 11)),
+                                      onTap: () => _connectToDevice(result.device),
+                                    );
+                                  },
+                                ),
                 ),
                 const SizedBox(height: 16),
                 ElevatedButton.icon(

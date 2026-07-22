@@ -165,7 +165,7 @@ class SupabaseService {
           .eq('user_id', sharedDeviceId)
           .order('created_at', ascending: false)
           .limit(1)
-          .single();
+          .maybeSingle();
 
       return response;
     } catch (e) {
