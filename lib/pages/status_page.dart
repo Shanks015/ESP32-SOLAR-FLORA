@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:supabase_flutter/supabase_flutter.dart' as supabase;
 import '../services/supabase_service.dart';
 import '../widgets/custom_widgets.dart';
 import '../widgets/wifi_config_dialog.dart';
@@ -31,8 +32,11 @@ class _StatusPageState extends State<StatusPage> with TickerProviderStateMixin {
 
   // Telemetry state
   int _batteryPercentage = 85;
+  int? _soilMoistureRaw;
+  bool _soilSensorEnabled = true;
   int _previousBatteryPercentage = -1; // -1 means no previous reading yet
   bool _isCharging = false;
+  double? _solarVoltage;
   Timer? _telemetryTimer;
 
   // Device connectivity states
@@ -55,11 +59,25 @@ class _StatusPageState extends State<StatusPage> with TickerProviderStateMixin {
     _telemetryTimer = Timer.periodic(const Duration(seconds: 5), (timer) {
       _loadTelemetry();
     });
+
+    final _supabase = supabase.Supabase.instance.client;
+    _supabase
+      .channel('telemetry_realtime')
+      .onPostgresChanges(
+        event: supabase.PostgresChangeEvent.insert,
+        schema: 'public',
+        table: 'telemetry',
+        callback: (payload) {
+          if (mounted) _loadTelemetry();
+        },
+      )
+      .subscribe();
   }
 
   @override
   void dispose() {
-
+    final _supabase = supabase.Supabase.instance.client;
+    _supabase.channel('telemetry_realtime').unsubscribe();
     _wateringTimer?.cancel();
     _countdownTimer?.cancel();
     _telemetryTimer?.cancel();
@@ -68,40 +86,49 @@ class _StatusPageState extends State<StatusPage> with TickerProviderStateMixin {
 
   Future<void> _loadTelemetry() async {
     try {
-      final userId = _supabaseService.getCurrentUser()?.id;
-      if (userId != null) {
+      // Default to shared_device_001 so any user (even logged out) can view/control
+      final userId = _supabaseService.getCurrentUser()?.id ?? SupabaseService.sharedDeviceId;
+      if (true) {
         final telemetry = await _supabaseService.getLatestTelemetry(userId);
         if (telemetry != null && mounted) {
+          // DEBUG: print raw data so we can diagnose in console
+          print('[Solak Debug] Telemetry row: $telemetry');
+
           setState(() {
             final newPercentage = telemetry['battery_percentage'] ?? 85;
 
-            // Derive charging state from battery % trend
-            if (_previousBatteryPercentage != -1) {
-              if (newPercentage > _previousBatteryPercentage) {
-                _isCharging = true;  // % went up → charging
-              } else if (newPercentage < _previousBatteryPercentage) {
-                _isCharging = false; // % went down → discharging
-              }
-              // If equal, keep previous state (no change)
+            // Charging state and solar voltage now come from the ESP32
+            _isCharging = telemetry['is_charging'] ?? false;
+            if (telemetry['solar_voltage'] != null) {
+              _solarVoltage = (telemetry['solar_voltage'] as num).toDouble();
+            } else {
+              _solarVoltage = null;
             }
+            
             _previousBatteryPercentage = newPercentage;
             _batteryPercentage = newPercentage;
+            
+            _soilMoistureRaw = telemetry['soil_moisture'];
 
             final lastSeenStr = telemetry['created_at'];
             if (lastSeenStr != null) {
-              final lastSeen = DateTime.parse(lastSeenStr).toLocal();
-              final now = DateTime.now();
+              // FIX: Supabase sometimes returns timestamps without timezone suffix.
+              // If no 'Z' or '+' offset is present, explicitly treat it as UTC.
+              final normalized = (lastSeenStr.contains('Z') || lastSeenStr.contains('+'))
+                  ? lastSeenStr
+                  : '${lastSeenStr}Z';
+              final lastSeen = DateTime.parse(normalized).toUtc();
+              final now = DateTime.now().toUtc();
               final diff = now.difference(lastSeen);
-              
-              // ESP32 uploads every 5 seconds or goes to sleep for _sleepInterval seconds.
-              // If the sleep interval is > 12 seconds (deep sleep), use _sleepInterval + 60s buffer.
-              // Otherwise, if active real-time mode, check within 12 seconds.
-              final timeout = _sleepInterval > 12 ? _sleepInterval + 60 : 12;
+
+              print('[Solak Debug] created_at raw: $lastSeenStr | normalized: $normalized | diff: ${diff.inSeconds}s | timeout: ${_sleepInterval > 30 ? _sleepInterval + 60 : 30}s');
+
+              final timeout = _sleepInterval > 30 ? _sleepInterval + 60 : 30;
               _isDeviceOnline = diff.inSeconds <= timeout;
               if (!_isDeviceOnline) {
                 _isCharging = false;
               }
-              
+
               if (diff.inSeconds < 60) {
                 _lastSeenText = 'Just now';
               } else if (diff.inMinutes < 60) {
@@ -122,11 +149,10 @@ class _StatusPageState extends State<StatusPage> with TickerProviderStateMixin {
             }
           });
         } else if (mounted) {
-          setState(() {
-            _isDeviceOnline = false;
-            _isCharging = false;
-            _lastSeenText = 'Never';
-          });
+          // Don't immediately mark offline on null — could be a transient network error.
+          // Only mark offline if we haven't had a successful reading recently.
+          print('[Solak Debug] getLatestTelemetry returned null. userId=$userId');
+          // Keep existing _isDeviceOnline state; don't overwrite with false on every failed poll.
         }
 
         // Fetch profiles data for configs and daily schedule
@@ -137,6 +163,7 @@ class _StatusPageState extends State<StatusPage> with TickerProviderStateMixin {
             _dailyWateringEnabled = profile['daily_watering_enabled'] ?? false;
             _dailyWateringTime = profile['daily_watering_time'] ?? '08:00:00';
             _sleepInterval = profile['sleep_interval'] ?? 600;
+            _soilSensorEnabled = profile['soil_sensor_enabled'] ?? true;
 
             final scheduledTimeStr = profile['scheduled_watering_time'];
             if (scheduledTimeStr != null) {
@@ -167,7 +194,7 @@ class _StatusPageState extends State<StatusPage> with TickerProviderStateMixin {
     _triggerLocalWateringUI();
 
     try {
-      final userId = _supabaseService.getCurrentUser()?.id;
+      final userId = _supabaseService.getCurrentUser()?.id ?? SupabaseService.sharedDeviceId;
       if (userId != null) {
         await _supabaseService.updateProfile({'motor_active': true});
       }
@@ -195,7 +222,7 @@ class _StatusPageState extends State<StatusPage> with TickerProviderStateMixin {
           });
         }
         try {
-          final userId = _supabaseService.getCurrentUser()?.id;
+          final userId = _supabaseService.getCurrentUser()?.id ?? SupabaseService.sharedDeviceId;
           if (userId != null) {
             await _supabaseService.updateProfile({'motor_active': false});
           }
@@ -258,7 +285,7 @@ class _StatusPageState extends State<StatusPage> with TickerProviderStateMixin {
     });
 
     try {
-      final userId = _supabaseService.getCurrentUser()?.id;
+      final userId = _supabaseService.getCurrentUser()?.id ?? SupabaseService.sharedDeviceId;
       if (userId != null) {
         await _supabaseService.updateProfile({
           'scheduled_watering_time': targetTime.toIso8601String(),
@@ -282,7 +309,7 @@ class _StatusPageState extends State<StatusPage> with TickerProviderStateMixin {
 
   Future<void> _clearDbTimer() async {
     try {
-      final userId = _supabaseService.getCurrentUser()?.id;
+      final userId = _supabaseService.getCurrentUser()?.id ?? SupabaseService.sharedDeviceId;
       if (userId != null) {
         await _supabaseService.updateProfile({
           'scheduled_watering_time': null,
@@ -293,12 +320,21 @@ class _StatusPageState extends State<StatusPage> with TickerProviderStateMixin {
     }
   }
 
+  Future<void> _toggleSoilSensor(bool value) async {
+    setState(() => _soilSensorEnabled = value);
+    try {
+      await _supabaseService.updateProfile({'soil_sensor_enabled': value});
+    } catch (e) {
+      print('Error toggling soil sensor: $e');
+    }
+  }
+
   Future<void> _updateWateringDuration(int seconds) async {
     setState(() {
       _wateringDuration = seconds;
     });
     try {
-      final userId = _supabaseService.getCurrentUser()?.id;
+      final userId = _supabaseService.getCurrentUser()?.id ?? SupabaseService.sharedDeviceId;
       if (userId != null) {
         await _supabaseService.updateProfile({
           'watering_duration': seconds,
@@ -316,7 +352,7 @@ class _StatusPageState extends State<StatusPage> with TickerProviderStateMixin {
       _dailyWateringEnabled = value;
     });
     try {
-      final userId = _supabaseService.getCurrentUser()?.id;
+      final userId = _supabaseService.getCurrentUser()?.id ?? SupabaseService.sharedDeviceId;
       if (userId != null) {
         await _supabaseService.updateProfile({
           'daily_watering_enabled': value,
@@ -347,7 +383,7 @@ class _StatusPageState extends State<StatusPage> with TickerProviderStateMixin {
         _dailyWateringTime = formattedTime;
       });
       try {
-        final userId = _supabaseService.getCurrentUser()?.id;
+        final userId = _supabaseService.getCurrentUser()?.id ?? SupabaseService.sharedDeviceId;
         if (userId != null) {
           await _supabaseService.updateProfile({
             'daily_watering_time': formattedTime,
@@ -468,7 +504,7 @@ class _StatusPageState extends State<StatusPage> with TickerProviderStateMixin {
 
                           // Offline Banner Alert
                           if (!_isDeviceOnline) ...[
-                            Container(
+                              Container(
                               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                               decoration: BoxDecoration(
                                 color: const Color(0xFFFFDAD6),
@@ -484,12 +520,20 @@ class _StatusPageState extends State<StatusPage> with TickerProviderStateMixin {
                                       const SizedBox(width: 12),
                                       Expanded(
                                         child: Text(
-                                          'Device is offline. Controls are disabled until the device wakes up and reconnects.',
+                                          'Device is offline. Last seen: $_lastSeenText',
                                           style: GoogleFonts.manrope(
                                             fontSize: 12,
                                             color: const Color(0xFF410002),
                                             fontWeight: FontWeight.w600,
                                           ),
+                                        ),
+                                      ),
+                                      // Force refresh button
+                                      GestureDetector(
+                                        onTap: _loadTelemetry,
+                                        child: const Padding(
+                                          padding: EdgeInsets.only(left: 8),
+                                          child: Icon(Icons.refresh, color: Color(0xFF410002), size: 18),
                                         ),
                                       ),
                                     ],
@@ -505,10 +549,10 @@ class _StatusPageState extends State<StatusPage> with TickerProviderStateMixin {
                                     child: Row(
                                       mainAxisSize: MainAxisSize.min,
                                       children: [
-                                        const Icon(Icons.bluetooth, size: 16, color: Color(0xFF410002)),
+                                        const Icon(Icons.wifi, size: 16, color: Color(0xFF410002)),
                                         const SizedBox(width: 6),
                                         Text(
-                                          'Configure WiFi via Bluetooth',
+                                          'Setup Device Wi-Fi Connection',
                                           style: GoogleFonts.manrope(
                                             fontSize: 12,
                                             fontWeight: FontWeight.w800,
@@ -640,7 +684,11 @@ class _StatusPageState extends State<StatusPage> with TickerProviderStateMixin {
                               ),
                             ),
                           ),
-                          const SizedBox(height: 36),
+                          const SizedBox(height: 24),
+
+                          // --- Soil Moisture Indicator ---
+                          _buildSoilMoistureIndicator(),
+                          const SizedBox(height: 24),
 
                           // Water Button
                           ElevatedButton.icon(
@@ -728,7 +776,6 @@ class _StatusPageState extends State<StatusPage> with TickerProviderStateMixin {
                                       ),
                                       DropdownButton<int>(
                                         value: _wateringDuration,
-                                        dropdownColor: isDark ? const Color(0xFF16221A) : Colors.white,
                                         style: GoogleFonts.manrope(
                                           color: textMain,
                                           fontWeight: FontWeight.w600,
@@ -910,6 +957,93 @@ class _StatusPageState extends State<StatusPage> with TickerProviderStateMixin {
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildSoilMoistureIndicator() {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final cardColor = isDark ? const Color(0xFF1A261F) : const Color(0xFFF1FCF1);
+    final borderColor = isDark ? const Color(0xFF2A3D31) : const Color(0xFFE1E3DD);
+    final primaryColor = const Color(0xFF4F635B);
+
+    String statusText = "Disabled";
+    Color statusColor = Colors.grey;
+    IconData statusIcon = Icons.sensors_off;
+
+    if (!_soilSensorEnabled) {
+      statusText = "Disabled";
+      statusColor = Colors.grey;
+      statusIcon = Icons.sensors_off;
+    } else if (_soilMoistureRaw == null || _soilMoistureRaw! <= 100 || _soilMoistureRaw! >= 4095) {
+      statusText = "Unplugged";
+      statusColor = Colors.grey;
+      statusIcon = Icons.sensors_off;
+    } else if (_soilMoistureRaw! > 2800) {
+      statusText = "Dry";
+      statusColor = Colors.orange;
+      statusIcon = Icons.water_drop_outlined;
+    } else if (_soilMoistureRaw! > 1500) {
+      statusText = "Moist";
+      statusColor = Colors.lightBlue;
+      statusIcon = Icons.water_drop;
+    } else {
+      statusText = "Wet";
+      statusColor = Colors.blue;
+      statusIcon = Icons.water;
+    }
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.only(left: 20, right: 12, top: 12, bottom: 12),
+      decoration: BoxDecoration(
+        color: cardColor,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: borderColor),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.grass, color: _soilSensorEnabled ? primaryColor : Colors.grey),
+              const SizedBox(width: 12),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Soil Moisture',
+                    style: GoogleFonts.manrope(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w700,
+                      color: isDark ? Colors.white : const Color(0xFF1F2B24),
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Row(
+                    children: [
+                      Icon(statusIcon, color: statusColor, size: 14),
+                      const SizedBox(width: 4),
+                      Text(
+                        statusText,
+                        style: GoogleFonts.manrope(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w800,
+                          color: statusColor,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ],
+          ),
+          Switch(
+            value: _soilSensorEnabled,
+            onChanged: _toggleSoilSensor,
+            activeColor: primaryColor,
+          ),
+        ],
       ),
     );
   }

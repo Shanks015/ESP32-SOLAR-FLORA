@@ -77,7 +77,7 @@ class MyApp extends StatelessWidget {
             ),
             dividerColor: const Color(0xFF2A3D31),
           ),
-          home: const AuthGate(),
+          home: const StatusPage(),
           routes: {
             '/status': (context) => const StatusPage(),
             '/energy': (context) => const EnergyPage(),
@@ -85,32 +85,6 @@ class MyApp extends StatelessWidget {
             '/login': (context) => const LoginPage(),
           },
         );
-      },
-    );
-  }
-}
-
-class AuthGate extends StatelessWidget {
-  const AuthGate({Key? key}) : super(key: key);
-
-  @override
-  Widget build(BuildContext context) {
-    return StreamBuilder<fb_auth.User?>(
-      stream: fb_auth.FirebaseAuth.instance.authStateChanges(),
-      builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) {
-          return const Scaffold(
-            body: Center(
-              child: CircularProgressIndicator(
-                valueColor: AlwaysStoppedAnimation(Color(0xFF4F635B)),
-              ),
-            ),
-          );
-        }
-        if (snapshot.hasData) {
-          return const StatusPage();
-        }
-        return const LoginPage();
       },
     );
   }

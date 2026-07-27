@@ -229,6 +229,57 @@ class _SettingsPageState extends State<SettingsPage> {
     }
   }
 
+  Future<void> _resetDeviceWifi() async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Reset Device Wi-Fi?', style: GoogleFonts.manrope(fontWeight: FontWeight.bold)),
+        content: Text(
+          'This will clear the saved Wi-Fi credentials on your device. The device will disconnect and restart the "Solak_Setup" hotspot. Proceed?',
+          style: GoogleFonts.manrope(fontSize: 14),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: Text('Cancel', style: GoogleFonts.manrope(color: Colors.grey)),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFFBA1A1A),
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+            ),
+            child: Text('Reset', style: GoogleFonts.manrope(fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm == true) {
+      try {
+        await _supabaseService.updateProfile({'wifi_reset': true});
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('WiFi reset command sent to device successfully!'),
+              backgroundColor: Color(0xFF34D399),
+            ),
+          );
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Failed to send reset command: $e'),
+              backgroundColor: const Color(0xFFBA1A1A),
+            ),
+          );
+        }
+      }
+    }
+  }
+
   Future<void> _toggleDarkMode(bool value) async {
     setState(() {
       _darkMode = value;
@@ -603,6 +654,44 @@ class _SettingsPageState extends State<SettingsPage> {
                                   const Icon(Icons.chevron_right, size: 18, color: Color(0xFF727875)),
                                 ],
                               ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 24),
+
+                      // Device Settings Section
+                      Text(
+                        'DEVICE SETTINGS',
+                        style: GoogleFonts.manrope(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                          color: primaryLabelColor,
+                          letterSpacing: 1.2,
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      Material(
+                        color: cardColor,
+                        clipBehavior: Clip.antiAlias,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(16),
+                          side: BorderSide(color: borderColor),
+                        ),
+                        child: Column(
+                          children: [
+                            ListTile(
+                              onTap: _resetDeviceWifi,
+                              leading: const Icon(Icons.wifi_off, color: Color(0xFFBA1A1A)),
+                              title: Text(
+                                'Reset Device Wi-Fi Connection',
+                                style: GoogleFonts.manrope(
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.w500,
+                                  color: const Color(0xFFBA1A1A),
+                                ),
+                              ),
+                              trailing: const Icon(Icons.chevron_right, size: 18, color: Color(0xFF727875)),
                             ),
                           ],
                         ),

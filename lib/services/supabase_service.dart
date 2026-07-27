@@ -159,13 +159,35 @@ class SupabaseService {
   // Get latest telemetry for a specific user ID (Real Database query)
   Future<Map<String, dynamic>?> getLatestTelemetry(String userId) async {
     try {
-      final response = await _supabase
+      // Try querying by the passed userId first (matches what ESP32 sends)
+      var response = await _supabase
           .from('telemetry')
           .select()
-          .eq('user_id', sharedDeviceId)
+          .eq('user_id', userId)
           .order('created_at', ascending: false)
           .limit(1)
           .maybeSingle();
+
+      // Fallback: if no result, try with the shared device ID
+      if (response == null) {
+        response = await _supabase
+            .from('telemetry')
+            .select()
+            .eq('user_id', sharedDeviceId)
+            .order('created_at', ascending: false)
+            .limit(1)
+            .maybeSingle();
+      }
+
+      // Last fallback: get the most recent telemetry row regardless of user_id
+      if (response == null) {
+        response = await _supabase
+            .from('telemetry')
+            .select()
+            .order('created_at', ascending: false)
+            .limit(1)
+            .maybeSingle();
+      }
 
       return response;
     } catch (e) {

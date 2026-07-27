@@ -1,9 +1,9 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:io';
 import 'package:flutter/material.dart';
-import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:http/http.dart' as http;
+import 'package:url_launcher/url_launcher.dart';
 
 class WifiConfigDialog extends StatefulWidget {
   const WifiConfigDialog({Key? key}) : super(key: key);
@@ -13,441 +13,399 @@ class WifiConfigDialog extends StatefulWidget {
 }
 
 class _WifiConfigDialogState extends State<WifiConfigDialog> {
-  // BLE UUIDs matching the ESP32 code
-  final String serviceUuid = "4fafc201-1fb5-459e-8fcc-c5c9c331914b";
-  final String writeUuid = "beb5483e-36e1-4688-b7f5-ea07361b26a8";
-  final String statusUuid = "beb5483e-36e1-4688-b7f5-ea07361b26a9";
-
-  BluetoothDevice? _connectedDevice;
-  BluetoothService? _targetService;
-  BluetoothCharacteristic? _writeCharacteristic;
-  BluetoothCharacteristic? _statusCharacteristic;
-
-  List<ScanResult> _scanResults = [];
-  bool _isScanning = false;
-  bool _isConnected = false;
-  bool _isConnecting = false;
-  String _statusMessage = "IDLE"; // IDLE, CONNECTING, CONNECTED, FAILED
-  bool _isSending = false;
-
-  final _ssidController = TextEditingController();
-  final _passwordController = TextEditingController();
-  final _formKey = GlobalKey<FormState>();
-
-  StreamSubscription<List<ScanResult>>? _scanSubscription;
-  StreamSubscription<BluetoothConnectionState>? _connectionSubscription;
-  StreamSubscription<List<int>>? _statusSubscription;
-  BluetoothAdapterState _bluetoothState = BluetoothAdapterState.unknown;
-  StreamSubscription<BluetoothAdapterState>? _adapterStateSubscription;
-
-  @override
-  void initState() {
-    super.initState();
-    // Check initial state synchronously
-    _bluetoothState = FlutterBluePlus.adapterStateNow;
-    // Subscribe to Bluetooth adapter state changes
-    _adapterStateSubscription = FlutterBluePlus.adapterState.listen((state) {
-      if (mounted) {
-        setState(() {
-          _bluetoothState = state;
-          if (state != BluetoothAdapterState.on) {
-            _scanResults.clear();
-          }
-        });
-      }
-    });
-    _startScan();
-  }
+  // 0 = instructions, 1 = checking, 2 = ready (portal reachable), 3 = not reachable
+  int _step = 0;
+  bool _isChecking = false;
+  Timer? _statusTimer;
 
   @override
   void dispose() {
-    _adapterStateSubscription?.cancel();
-    _scanSubscription?.cancel();
-    _connectionSubscription?.cancel();
-    _statusSubscription?.cancel();
-    _ssidController.dispose();
-    _passwordController.dispose();
-    if (_connectedDevice != null) {
-      _connectedDevice!.disconnect();
-    }
+    _statusTimer?.cancel();
     super.dispose();
   }
 
-  Future<void> _requestEnableBluetooth() async {
-    if (Platform.isAndroid) {
-      try {
-        await FlutterBluePlus.turnOn();
-      } catch (e) {
-        print("Error turning on Bluetooth: $e");
+  // Try to reach the device portal to confirm phone is on Solak_Setup network
+  Future<void> _checkDeviceReachable() async {
+    setState(() { _isChecking = true; _step = 1; });
+    try {
+      final response = await http
+          .get(Uri.parse('http://192.168.4.1/scan'))
+          .timeout(const Duration(seconds: 5));
+      if (response.statusCode == 200) {
+        setState(() { _step = 2; _isChecking = false; });
+        return;
       }
-    }
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text("Please turn on Bluetooth to connect to the device"),
-          backgroundColor: Color(0xFFBA1A1A),
-        ),
-      );
-    }
+    } catch (_) {}
+    setState(() { _step = 3; _isChecking = false; });
   }
 
-  Future<void> _startScan() async {
-    // Request Bluetooth and Location checks
-    if (await FlutterBluePlus.isSupported == false) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Bluetooth is not supported on this device")),
-      );
-      return;
-    }
-
-    final adapterState = FlutterBluePlus.adapterStateNow;
-    if (adapterState != BluetoothAdapterState.on) {
-      await _requestEnableBluetooth();
-      return;
-    }
-
-    setState(() {
-      _scanResults.clear();
-      _isScanning = true;
-    });
-
-    _scanSubscription = FlutterBluePlus.scanResults.listen((results) {
+  Future<void> _openPortal() async {
+    final uri = Uri.parse('http://192.168.4.1/');
+    try {
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
+    } catch (_) {
       if (mounted) {
-        setState(() {
-          // Filter to show devices with "Solak" in name, or all devices if name is empty
-          _scanResults = results.where((r) => r.device.platformName.isNotEmpty).toList();
-        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Open http://192.168.4.1 in your browser manually.'),
+            backgroundColor: Colors.orange,
+          ),
+        );
       }
-    });
-
-    try {
-      await FlutterBluePlus.startScan(timeout: const Duration(seconds: 15));
-    } catch (e) {
-      print("Scan error: $e");
-    }
-
-    if (mounted) {
-      setState(() {
-        _isScanning = false;
-      });
-    }
-  }
-
-  Future<void> _connectToDevice(BluetoothDevice device) async {
-    final adapterState = FlutterBluePlus.adapterStateNow;
-    if (adapterState != BluetoothAdapterState.on) {
-      await _requestEnableBluetooth();
-      return;
-    }
-
-    setState(() {
-      _isConnecting = true;
-    });
-
-    try {
-      await device.connect(license: License.nonprofit, autoConnect: false);
-      _connectedDevice = device;
-
-      _connectionSubscription = device.connectionState.listen((state) {
-        if (state == BluetoothConnectionState.disconnected && mounted) {
-          setState(() {
-            _isConnected = false;
-            _isConnecting = false;
-            _statusMessage = "IDLE";
-          });
-        }
-      });
-
-      // Discover Services
-      List<BluetoothService> services = await device.discoverServices();
-      for (var service in services) {
-        if (service.uuid.toString().toLowerCase() == serviceUuid.toLowerCase()) {
-          _targetService = service;
-          for (var char in service.characteristics) {
-            if (char.uuid.toString().toLowerCase() == writeUuid.toLowerCase()) {
-              _writeCharacteristic = char;
-            }
-            if (char.uuid.toString().toLowerCase() == statusUuid.toLowerCase()) {
-              _statusCharacteristic = char;
-            }
-          }
-        }
-      }
-
-      if (_writeCharacteristic != null && _statusCharacteristic != null) {
-        // Setup status notifications
-        await _statusCharacteristic!.setNotifyValue(true);
-        _statusSubscription = _statusCharacteristic!.lastValueStream.listen((value) {
-          if (value.isNotEmpty && mounted) {
-            String status = utf8.decode(value);
-            setState(() {
-              _statusMessage = status;
-              if (status == "CONNECTED") {
-                _isSending = false;
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text("WiFi configured and connected successfully!"),
-                    backgroundColor: Color(0xFF41B883),
-                  ),
-                );
-                Future.delayed(const Duration(seconds: 2), () {
-                  if (mounted) Navigator.of(context).pop();
-                });
-              } else if (status == "FAILED") {
-                _isSending = false;
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text("WiFi connection failed. Check your SSID and Password."),
-                    backgroundColor: Color(0xFFBA1A1A),
-                  ),
-                );
-              }
-            });
-          }
-        });
-
-        setState(() {
-          _isConnected = true;
-          _isConnecting = false;
-        });
-      } else {
-        throw Exception("Target BLE characteristics not found on device.");
-      }
-    } catch (e) {
-      print("Connection error: $e");
-      setState(() {
-        _isConnecting = false;
-      });
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("Failed to connect: $e")),
-      );
-    }
-  }
-
-  Future<void> _sendConfig() async {
-    if (!_formKey.currentState!.validate() || _writeCharacteristic == null) return;
-
-    setState(() {
-      _isSending = true;
-      _statusMessage = "CONNECTING";
-    });
-
-    final configPayload = jsonEncode({
-      "ssid": _ssidController.text.trim(),
-      "pass": _passwordController.text,
-    });
-
-    try {
-      await _writeCharacteristic!.write(utf8.encode(configPayload));
-    } catch (e) {
-      setState(() {
-        _isSending = false;
-      });
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("Failed to send credentials: $e")),
-      );
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final cardBg = isDark ? const Color(0xFF16221A) : Colors.white;
-    final primaryColor = const Color(0xFF4F635B);
-    final textColor = isDark ? const Color(0xFFE0EAE1) : const Color(0xFF141E17);
+    const bg = Color(0xFF0a0f0a);
+    const green = Color(0xFF34d399);
+    const cardBg = Color(0xFF16221a);
+    const border = Color(0xFF2a3d30);
 
     return Dialog(
-      backgroundColor: cardBg,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+      backgroundColor: bg,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(24),
+        side: const BorderSide(color: Color(0xFF2a3d30)),
+      ),
       child: Container(
         padding: const EdgeInsets.all(24),
-        width: double.infinity,
         constraints: const BoxConstraints(maxWidth: 400),
-        child: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text(
-                    "Device Onboarding",
-                    style: GoogleFonts.manrope(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                      color: textColor,
-                    ),
-                  ),
-                  IconButton(
-                    icon: const Icon(Icons.close),
-                    onPressed: () => Navigator.of(context).pop(),
-                  )
-                ],
-              ),
-              const Divider(),
-              const SizedBox(height: 16),
-
-              if (!_isConnected) ...[
-                Text(
-                  "Select your Solak device to connect via Bluetooth:",
-                  style: GoogleFonts.manrope(color: textColor, fontSize: 13),
-                ),
-                const SizedBox(height: 12),
-                Container(
-                  height: 180,
-                  decoration: BoxDecoration(
-                    border: Border.all(color: Colors.grey.withOpacity(0.3)),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: _bluetoothState != BluetoothAdapterState.on
-                      ? InkWell(
-                          onTap: _requestEnableBluetooth,
-                          borderRadius: BorderRadius.circular(12),
-                          child: Center(
-                            child: Padding(
-                              padding: const EdgeInsets.all(16.0),
-                              child: Column(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  const Icon(
-                                    Icons.bluetooth_disabled,
-                                    color: Color(0xFFBA1A1A),
-                                    size: 32,
-                                  ),
-                                  const SizedBox(height: 8),
-                                  Text(
-                                    "Bluetooth is turned off. Tap to turn on Bluetooth.",
-                                    textAlign: TextAlign.center,
-                                    style: GoogleFonts.manrope(
-                                      color: const Color(0xFFBA1A1A),
-                                      fontWeight: FontWeight.w600,
-                                      fontSize: 12,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                        )
-                      : _isConnecting
-                          ? const Center(
-                              child: CircularProgressIndicator(
-                                valueColor: AlwaysStoppedAnimation(Color(0xFF4F635B)),
-                              ),
-                            )
-                          : _scanResults.isEmpty
-                              ? Center(
-                                  child: Text(
-                                    _isScanning ? "Scanning..." : "No devices found.",
-                                    style: GoogleFonts.manrope(color: Colors.grey),
-                                  ),
-                                )
-                              : ListView.builder(
-                                  itemCount: _scanResults.length,
-                                  itemBuilder: (context, index) {
-                                    final result = _scanResults[index];
-                                    final name = result.device.platformName;
-                                    return ListTile(
-                                      leading: const Icon(Icons.bluetooth),
-                                      title: Text(
-                                        name,
-                                        style: GoogleFonts.manrope(fontWeight: FontWeight.w600, fontSize: 14),
-                                      ),
-                                      subtitle: Text(result.device.remoteId.toString(), style: const TextStyle(fontSize: 11)),
-                                      onTap: () => _connectToDevice(result.device),
-                                    );
-                                  },
-                                ),
-                ),
-                const SizedBox(height: 16),
-                ElevatedButton.icon(
-                  onPressed: _isScanning ? null : _startScan,
-                  icon: const Icon(Icons.refresh, size: 16),
-                  label: Text("SCAN", style: GoogleFonts.manrope(fontWeight: FontWeight.w700)),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: primaryColor,
-                    foregroundColor: Colors.white,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                  ),
-                ),
-              ] else ...[
-                Text(
-                  "Connected to ${(_connectedDevice?.platformName.isNotEmpty ?? false) ? _connectedDevice?.platformName : 'Solak Device'}",
-                  style: GoogleFonts.manrope(color: const Color(0xFF41B883), fontWeight: FontWeight.bold, fontSize: 14),
-                ),
-                const SizedBox(height: 16),
-                Form(
-                  key: _formKey,
-                  child: Column(
-                    children: [
-                      TextFormField(
-                        controller: _ssidController,
-                        decoration: InputDecoration(
-                          labelText: "WiFi SSID (Name)",
-                          labelStyle: GoogleFonts.manrope(fontSize: 13),
-                          border: const OutlineInputBorder(),
-                        ),
-                        validator: (v) => (v == null || v.trim().isEmpty) ? "SSID required" : null,
-                      ),
-                      const SizedBox(height: 12),
-                      TextFormField(
-                        controller: _passwordController,
-                        obscureText: true,
-                        decoration: InputDecoration(
-                          labelText: "WiFi Password",
-                          labelStyle: GoogleFonts.manrope(fontSize: 13),
-                          border: const OutlineInputBorder(),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 20),
-                if (_isSending) ...[
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      const SizedBox(
-                        width: 16,
-                        height: 16,
-                        child: CircularProgressIndicator(strokeWidth: 2, valueColor: AlwaysStoppedAnimation(Color(0xFF4F635B))),
-                      ),
-                      const SizedBox(width: 12),
-                      Text(
-                        "Status: $_statusMessage",
-                        style: GoogleFonts.manrope(fontSize: 13, fontWeight: FontWeight.bold),
-                      )
-                    ],
-                  ),
-                  const SizedBox(height: 16),
-                ],
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            // Header
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
                 Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                   children: [
-                    TextButton(
-                      onPressed: _isSending
-                          ? null
-                          : () {
-                              _connectedDevice?.disconnect();
-                            },
-                      child: Text("Disconnect", style: GoogleFonts.manrope(color: Colors.red)),
-                    ),
-                    ElevatedButton(
-                      onPressed: _isSending ? null : _sendConfig,
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: primaryColor,
-                        foregroundColor: Colors.white,
+                    const Icon(Icons.wifi_tethering, color: green, size: 22),
+                    const SizedBox(width: 10),
+                    Text(
+                      'Device Wi-Fi Setup',
+                      style: GoogleFonts.poppins(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white,
                       ),
-                      child: Text("Send Setup", style: GoogleFonts.manrope(fontWeight: FontWeight.bold)),
-                    )
+                    ),
                   ],
                 ),
+                IconButton(
+                  icon: const Icon(Icons.close, color: Colors.grey),
+                  onPressed: () => Navigator.of(context).pop(),
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(),
+                ),
               ],
+            ),
+            const SizedBox(height: 4),
+            Text(
+              'Connect your Solak device to your home Wi-Fi',
+              style: GoogleFonts.poppins(fontSize: 12, color: Colors.grey[500]),
+            ),
+            const SizedBox(height: 20),
+
+            // Step content
+            if (_step == 0) ...[
+              _buildStepCard(
+                cardBg: cardBg,
+                border: border,
+                steps: const [
+                  _StepItem(
+                    number: '1',
+                    title: 'Power on your Solak device',
+                    subtitle: 'Wait ~10 seconds for it to boot up',
+                    icon: Icons.power_settings_new,
+                  ),
+                  _StepItem(
+                    number: '2',
+                    title: 'Connect to "Solak_Setup" Wi-Fi',
+                    subtitle: 'Open your phone\'s Wi-Fi settings and select it',
+                    icon: Icons.wifi,
+                    highlight: 'Solak_Setup',
+                  ),
+                  _StepItem(
+                    number: '3',
+                    title: 'Keep connection if asked',
+                    subtitle: '"No internet" warning is normal — tap "Keep"',
+                    icon: Icons.info_outline,
+                  ),
+                ],
+              ),
+              const SizedBox(height: 20),
+              ElevatedButton.icon(
+                onPressed: _checkDeviceReachable,
+                icon: const Icon(Icons.check_circle_outline, size: 18),
+                label: Text(
+                  "I'm Connected to Solak_Setup",
+                  style: GoogleFonts.poppins(fontWeight: FontWeight.bold, fontSize: 14),
+                ),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: green,
+                  foregroundColor: bg,
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                ),
+              ),
             ],
-          ),
+
+            // Checking step
+            if (_step == 1) ...[
+              Container(
+                padding: const EdgeInsets.all(24),
+                decoration: BoxDecoration(
+                  color: cardBg,
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: border),
+                ),
+                child: Column(
+                  children: [
+                    const CircularProgressIndicator(color: green, strokeWidth: 2),
+                    const SizedBox(height: 16),
+                    Text(
+                      'Checking device connection...',
+                      style: GoogleFonts.poppins(color: green, fontSize: 13),
+                      textAlign: TextAlign.center,
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      'Make sure you selected Solak_Setup in Wi-Fi settings',
+                      style: GoogleFonts.poppins(color: Colors.grey[500], fontSize: 11),
+                      textAlign: TextAlign.center,
+                    ),
+                  ],
+                ),
+              ),
+            ],
+
+            // Device reachable — open portal
+            if (_step == 2) ...[
+              Container(
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF0d2a1a),
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: green.withOpacity(0.4)),
+                ),
+                child: Column(
+                  children: [
+                    const Icon(Icons.check_circle, color: green, size: 40),
+                    const SizedBox(height: 12),
+                    Text(
+                      'Device found!',
+                      style: GoogleFonts.poppins(
+                        color: green,
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      'Tap below to open the setup page where you can select your home Wi-Fi and enter the password.',
+                      style: GoogleFonts.poppins(color: Colors.grey[400], fontSize: 12),
+                      textAlign: TextAlign.center,
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 16),
+              ElevatedButton.icon(
+                onPressed: _openPortal,
+                icon: const Icon(Icons.open_in_browser, size: 18),
+                label: Text(
+                  'Open Setup Page in Browser',
+                  style: GoogleFonts.poppins(fontWeight: FontWeight.bold, fontSize: 14),
+                ),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: green,
+                  foregroundColor: bg,
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                ),
+              ),
+              const SizedBox(height: 10),
+              OutlinedButton(
+                onPressed: () => setState(() => _step = 0),
+                style: OutlinedButton.styleFrom(
+                  side: const BorderSide(color: Color(0xFF2a3d30)),
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                ),
+                child: Text(
+                  'Back to Instructions',
+                  style: GoogleFonts.poppins(color: Colors.grey[400], fontSize: 13),
+                ),
+              ),
+            ],
+
+            // Not reachable
+            if (_step == 3) ...[
+              Container(
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF2a1010),
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: Colors.redAccent.withOpacity(0.4)),
+                ),
+                child: Column(
+                  children: [
+                    const Icon(Icons.wifi_off, color: Colors.redAccent, size: 40),
+                    const SizedBox(height: 12),
+                    Text(
+                      'Device not reachable',
+                      style: GoogleFonts.poppins(
+                        color: Colors.redAccent,
+                        fontSize: 15,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      'Make sure you have connected your phone to "Solak_Setup" Wi-Fi and tapped "Keep Connection" if prompted.',
+                      style: GoogleFonts.poppins(color: Colors.grey[400], fontSize: 12),
+                      textAlign: TextAlign.center,
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 16),
+              ElevatedButton.icon(
+                onPressed: _checkDeviceReachable,
+                icon: const Icon(Icons.refresh, size: 18),
+                label: Text(
+                  'Try Again',
+                  style: GoogleFonts.poppins(fontWeight: FontWeight.bold, fontSize: 14),
+                ),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: green,
+                  foregroundColor: bg,
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                ),
+              ),
+              const SizedBox(height: 10),
+              // Manual fallback
+              OutlinedButton.icon(
+                onPressed: _openPortal,
+                icon: const Icon(Icons.open_in_browser, size: 16, color: Colors.grey),
+                label: Text(
+                  'Open http://192.168.4.1 manually',
+                  style: GoogleFonts.poppins(color: Colors.grey[400], fontSize: 12),
+                ),
+                style: OutlinedButton.styleFrom(
+                  side: const BorderSide(color: Color(0xFF2a3d30)),
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                ),
+              ),
+            ],
+
+            const SizedBox(height: 8),
+            Text(
+              'The Solak_Setup hotspot shuts off automatically after 10 minutes once connected.',
+              style: GoogleFonts.poppins(
+                fontSize: 10,
+                color: Colors.grey[600],
+                fontStyle: FontStyle.italic,
+              ),
+              textAlign: TextAlign.center,
+            ),
+          ],
         ),
       ),
     );
   }
+
+  Widget _buildStepCard({
+    required Color cardBg,
+    required Color border,
+    required List<_StepItem> steps,
+  }) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: cardBg,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: border),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: steps.map((s) => _buildStep(s)).toList(),
+      ),
+    );
+  }
+
+  Widget _buildStep(_StepItem item) {
+    const green = Color(0xFF34d399);
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 14),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            width: 28,
+            height: 28,
+            decoration: BoxDecoration(
+              color: green.withOpacity(0.15),
+              shape: BoxShape.circle,
+              border: Border.all(color: green.withOpacity(0.4)),
+            ),
+            child: Center(
+              child: Text(
+                item.number,
+                style: GoogleFonts.poppins(
+                  color: green,
+                  fontSize: 12,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  item.title,
+                  style: GoogleFonts.poppins(
+                    color: Colors.white,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  item.subtitle,
+                  style: GoogleFonts.poppins(
+                    color: Colors.grey[500],
+                    fontSize: 11,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _StepItem {
+  final String number;
+  final String title;
+  final String subtitle;
+  final IconData icon;
+  final String? highlight;
+
+  const _StepItem({
+    required this.number,
+    required this.title,
+    required this.subtitle,
+    required this.icon,
+    this.highlight,
+  });
 }

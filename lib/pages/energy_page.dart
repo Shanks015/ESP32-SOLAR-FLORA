@@ -15,6 +15,7 @@ class _EnergyPageState extends State<EnergyPage> with TickerProviderStateMixin {
   final SupabaseService _supabaseService = SupabaseService();
   int _batteryPercentage = 82;
   bool _isCharging = true;
+  double? _solarVoltage;
   Timer? _telemetryTimer;
 
   // Pulse animation for charge indicator
@@ -62,13 +63,18 @@ class _EnergyPageState extends State<EnergyPage> with TickerProviderStateMixin {
 
   Future<void> _loadTelemetry() async {
     try {
-      final userId = _supabaseService.getCurrentUser()?.id;
+      final userId = _supabaseService.getCurrentUser()?.id ?? SupabaseService.sharedDeviceId;
       if (userId != null) {
         final telemetry = await _supabaseService.getLatestTelemetry(userId);
         if (telemetry != null && mounted) {
           setState(() {
             _batteryPercentage = telemetry['battery_percentage'] ?? 82;
             _isCharging = telemetry['is_charging'] ?? true;
+            if (telemetry['solar_voltage'] != null) {
+              _solarVoltage = (telemetry['solar_voltage'] as num).toDouble();
+            } else {
+              _solarVoltage = null;
+            }
           });
         }
       }
@@ -203,6 +209,18 @@ class _EnergyPageState extends State<EnergyPage> with TickerProviderStateMixin {
                                     color: textSecondary,
                                   ),
                                 ),
+                                if (_solarVoltage != null)
+                                  Padding(
+                                    padding: const EdgeInsets.only(top: 2),
+                                    child: Text(
+                                      '${_solarVoltage!.toStringAsFixed(2)}V',
+                                      style: GoogleFonts.manrope(
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w800,
+                                        color: primaryColor,
+                                      ),
+                                    ),
+                                  ),
                               ],
                             ),
 
