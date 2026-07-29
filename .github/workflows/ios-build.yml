@@ -36,7 +36,7 @@ jobs:
       - name: Package into IPA
         run: |
           mkdir -p Payload
-          mv build/ios/iphoneos/Runner.app Payload/
+          find . -name "Runner.app" -type d -exec cp -r {} Payload/ \;
           zip -qq -r -9 Solak_iOS.ipa Payload
 
       - name: Upload IPA Artifact
