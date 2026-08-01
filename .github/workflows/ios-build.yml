@@ -27,10 +27,8 @@ jobs:
       - name: Build iOS App (No Codesign)
         run: |
           flutter build ios --release --no-codesign || echo "First build failed, attempting to fix Podfile..."
-          if [ -f "ios/Podfile" ]; then
-            sed -i '' "s/^# platform :ios, .*/platform :ios, '14.0'/" ios/Podfile
-            sed -i '' "s/^platform :ios, .*/platform :ios, '14.0'/" ios/Podfile
-          fi
+          dart -e "import 'dart:io'; var f = File('ios/Podfile'); if(f.existsSync()){ var s = f.readAsStringSync(); s = s.replaceAll(RegExp(r'^#?\\s*platform :ios.*$', multiLine: true), 'platform :ios, \'14.0\''); f.writeAsStringSync(s); print('Podfile updated'); }"
+          cd ios && pod install --repo-update && cd .. || true
           flutter build ios --release --no-codesign
 
       - name: Package into IPA
