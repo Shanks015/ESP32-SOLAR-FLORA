@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:firebase_auth/firebase_auth.dart' as fb_auth;
+
 import '../services/supabase_service.dart';
 
 class LoginPage extends StatefulWidget {

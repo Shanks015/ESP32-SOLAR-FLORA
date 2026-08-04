@@ -1,8 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'package:firebase_core/firebase_core.dart';
-import 'package:firebase_auth/firebase_auth.dart' as fb_auth;
 import 'pages/settings_page.dart';
 import 'pages/status_page.dart';
 import 'pages/energy_page.dart';
@@ -15,9 +13,6 @@ final ValueNotifier<ThemeMode> themeModeNotifier = ValueNotifier(ThemeMode.light
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-
-  // Initialize Firebase using native config files (google-services.json / GoogleService-Info.plist)
-  await Firebase.initializeApp();
 
   // Load the environment variables file
   await dotenv.load(fileName: ".env");
