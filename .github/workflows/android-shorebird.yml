@@ -1,0 +1,87 @@
+name: Android Shorebird OTA
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: 'release = new Shorebird release, patch = OTA patch to an existing release'
+        required: true
+        default: patch
+        type: choice
+        options:
+          - patch
+          - release
+      release_version:
+        description: 'Release version to patch (e.g. 1.0.1+2). Required when mode=patch.'
+        required: false
+        type: string
+
+jobs:
+  build-android:
+    name: Shorebird Android
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+          cache: true
+
+      - name: Set up Shorebird
+        uses: shorebirdtech/setup-shorebird@v1
+
+      - name: Create .env from secret
+        run: |
+          cat <<'EOF' > .env
+          ${{ secrets.DOTENV_FILE }}
+          EOF
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Shorebird release (Android)
+        if: github.event_name == 'push' || inputs.mode == 'release'
+        env:
+          SHOREBIRD_TOKEN: ${{ secrets.SHOREBIRD_TOKEN }}
+        run: |
+          shorebird release android --artifact apk --verbose 2>&1 | tee build_log.txt
+
+      - name: Shorebird patch (Android OTA)
+        if: github.event_name == 'workflow_dispatch' && inputs.mode == 'patch'
+        env:
+          SHOREBIRD_TOKEN: ${{ secrets.SHOREBIRD_TOKEN }}
+        run: |
+          if [ -z "${{ inputs.release_version }}" ]; then
+            echo "::error::release_version is required when mode=patch"
+            exit 1
+          fi
+          shorebird patch android \
+            --release-version "${{ inputs.release_version }}" \
+            --no-confirm --verbose 2>&1 | tee build_log.txt
+
+      - name: Upload Build Log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Build-Log
+          path: build_log.txt
+
+      - name: Upload APK Artifact
+        if: github.event_name == 'push' || inputs.mode == 'release'
+        uses: actions/upload-artifact@v4
+        with:
+          name: Solak_Android_APK
+          path: build/app/outputs/flutter-apk/app-release.apk
