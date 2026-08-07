@@ -70,5 +70,12 @@
 	<string>This app requires access to the photo library to upload profile pictures.</string>
 	<key>NSCameraUsageDescription</key>
 	<string>This app requires access to the camera to capture profile photos.</string>
+	<key>NSAppTransportSecurity</key>
+	<dict>
+		<key>NSAllowsArbitraryLoads</key>
+		<true/>
+	</dict>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>This app requires local network access to communicate with the Solak device during setup.</string>
 </dict>
 </plist>

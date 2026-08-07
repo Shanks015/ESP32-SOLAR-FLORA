@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:google_sign_in/google_sign_in.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 
 import '../services/supabase_service.dart';
+import 'package:supabase_flutter/supabase_flutter.dart' as supabase_flutter;
 
 class LoginPage extends StatefulWidget {
   const LoginPage({Key? key}) : super(key: key);
@@ -72,12 +75,7 @@ class _LoginPageState extends State<LoginPage> {
         setState(() {
           _isLoading = false;
         });
-        String message = 'Sign in failed.';
-        if (e is fb_auth.FirebaseAuthException) {
-          message = e.message ?? 'An error occurred during authentication.';
-        } else {
-          message = e.toString();
-        }
+        String message = 'Sign in failed. ${e.toString()}';
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(message, style: GoogleFonts.manrope()),
@@ -99,6 +97,7 @@ class _LoginPageState extends State<LoginPage> {
       final user = await _supabaseService.signUpWithEmail(
         _emailController.text.trim(),
         _passwordController.text,
+        "Solak User", // Default full name
       );
 
       if (mounted) {
@@ -137,12 +136,7 @@ class _LoginPageState extends State<LoginPage> {
         setState(() {
           _isLoading = false;
         });
-        String message = 'Account creation failed.';
-        if (e is fb_auth.FirebaseAuthException) {
-          message = e.message ?? 'An error occurred during account creation.';
-        } else {
-          message = e.toString();
-        }
+        String message = 'Account creation failed. ${e.toString()}';
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(message, style: GoogleFonts.manrope()),
@@ -154,43 +148,64 @@ class _LoginPageState extends State<LoginPage> {
   }
 
   Future<void> _handleGoogleSignIn() async {
-    setState(() {
-      _isLoading = true;
-    });
-
+    setState(() { _isLoading = true; });
     try {
-      final user = await _supabaseService.signInWithGoogle();
+      // Trigger the Google Sign-In flow
+      final GoogleSignInAccount? googleUser = await GoogleSignIn().signIn();
+      if (googleUser == null) {
+        // User cancelled the sign-in
+        setState(() { _isLoading = false; });
+        return;
+      }
 
-      if (mounted) {
-        setState(() {
-          _isLoading = false;
-        });
+      // Obtain the auth details from the Google Sign-In
+      final GoogleSignInAuthentication googleAuth = await googleUser.authentication;
 
-        if (user != null) {
-          Navigator.of(context).pushReplacementNamed('/status');
-        } else {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(
-                'Google sign-in canceled or failed.',
-                style: GoogleFonts.manrope(),
-              ),
-              backgroundColor: const Color(0xFFBA1A1A),
-            ),
-          );
+      // Create a credential for Firebase
+      final credential = GoogleAuthProvider.credential(
+        accessToken: googleAuth.accessToken,
+        idToken: googleAuth.idToken,
+      );
+
+      // Sign in to Firebase with the Google credential
+      final userCredential = await FirebaseAuth.instance.signInWithCredential(credential);
+      final user = userCredential.user;
+
+      if (user != null) {
+        // Mirror user to Supabase profiles table
+        try {
+          final supabase = _supabaseService;
+          await supabase.getProfile(user.uid).then((profile) async {
+            if (profile == null) {
+              // Create profile in Supabase if it doesn't exist
+              final client = supabase_flutter.Supabase.instance.client;
+              await client.from('profiles').upsert({
+                'id': user.uid,
+                'email': user.email,
+                'full_name': user.displayName ?? '',
+              });
+            }
+          });
+        } catch (dbError) {
+          print('Warning: Failed to sync profile to Supabase: $dbError');
+        }
+
+        if (mounted) {
+          Navigator.pushReplacementNamed(context, '/status');
         }
       }
     } catch (e) {
       if (mounted) {
-        setState(() {
-          _isLoading = false;
-        });
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(e.toString(), style: GoogleFonts.manrope()),
+            content: Text('Google Sign-In failed: ${e.toString()}', style: GoogleFonts.manrope()),
             backgroundColor: const Color(0xFFBA1A1A),
           ),
         );
+      }
+    } finally {
+      if (mounted) {
+        setState(() { _isLoading = false; });
       }
     }
   }

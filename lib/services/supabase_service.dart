@@ -1,7 +1,6 @@
 import 'dart:io';
 import 'package:supabase_flutter/supabase_flutter.dart' as supabase;
-import 'package:firebase_auth/firebase_auth.dart' as firebase;
-import 'package:google_sign_in/google_sign_in.dart';
+import 'package:firebase_auth/firebase_auth.dart' as firebase_auth;
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 
 class AppUser {
@@ -12,11 +11,6 @@ class AppUser {
 
 class SupabaseService {
   final supabase.SupabaseClient _supabase = supabase.Supabase.instance.client;
-  final firebase.FirebaseAuth _firebaseAuth = firebase.FirebaseAuth.instance;
-  final GoogleSignIn _googleSignIn = GoogleSignIn();
-
-  // Shared ID used by both the app and the ESP32 to represent the shared device
-  static const String sharedDeviceId = "shared_device_001";
 
   // Initialize Supabase
   Future<void> initialize() async {
@@ -26,110 +20,88 @@ class SupabaseService {
     );
   }
 
-  // Google Sign In (via Firebase)
-  Future<AppUser?> signInWithGoogle() async {
+  // Email Sign In (via Firebase Auth)
+  Future<AppUser?> signInWithEmail(String email, String password) async {
     try {
-      final GoogleSignInAccount? googleUser = await _googleSignIn.signIn();
-      if (googleUser == null) return null;
-
-      final GoogleSignInAuthentication googleAuth = await googleUser.authentication;
-      final firebase.AuthCredential credential = firebase.GoogleAuthProvider.credential(
-        accessToken: googleAuth.accessToken,
-        idToken: googleAuth.idToken,
+      final response = await firebase_auth.FirebaseAuth.instance.signInWithEmailAndPassword(
+        email: email,
+        password: password,
       );
-
-      final firebase.UserCredential userCredential = await _firebaseAuth.signInWithCredential(credential);
-      final firebase.User? user = userCredential.user;
-
+      final user = response.user;
       if (user != null) {
-        // Automatically sync or create the shared profile in Supabase
-        await createUserProfileIfNotExist(sharedDeviceId, "shared@solak.app", "Solak System");
         return AppUser(id: user.uid, email: user.email);
       }
       return null;
     } catch (e) {
-      print('Error signing in with Google: $e');
+      print('Error signing in: $e');
+      rethrow;
+    }
+  }
+
+  // Email Sign Up (via Firebase Auth)
+  Future<AppUser?> signUpWithEmail(String email, String password, String fullName) async {
+    try {
+      final response = await firebase_auth.FirebaseAuth.instance.createUserWithEmailAndPassword(
+        email: email,
+        password: password,
+      );
+      final user = response.user;
+      
+      if (user != null) {
+        // Also update the display name in Firebase
+        await user.updateDisplayName(fullName);
+        
+        // IMPORTANT: We must also mirror this user into the Supabase database
+        // so that the devices and telemetry tables can link to them!
+        try {
+          await _supabase.from('profiles').upsert({
+            'id': user.uid,
+            'email': user.email,
+            'full_name': fullName,
+          });
+        } catch (dbError) {
+          print('Warning: Failed to create profile in Supabase: $dbError');
+        }
+
+        return AppUser(id: user.uid, email: user.email);
+      }
       return null;
+    } catch (e) {
+      print('Error signing up: $e');
+      rethrow;
     }
-  }
-
-  // Email Sign In (via Firebase)
-  Future<AppUser?> signInWithEmail(String email, String password) async {
-    final firebase.UserCredential credential = await _firebaseAuth.signInWithEmailAndPassword(
-      email: email,
-      password: password,
-    );
-    final user = credential.user;
-    if (user != null) {
-      await createUserProfileIfNotExist(sharedDeviceId, "shared@solak.app", "Solak System");
-      return AppUser(id: user.uid, email: user.email);
-    }
-    return null;
-  }
-
-  // Email Sign Up (via Firebase)
-  Future<AppUser?> signUpWithEmail(String email, String password) async {
-    final firebase.UserCredential credential = await _firebaseAuth.createUserWithEmailAndPassword(
-      email: email,
-      password: password,
-    );
-    final user = credential.user;
-    if (user != null) {
-      await createUserProfileIfNotExist(sharedDeviceId, "shared@solak.app", "Solak System");
-      return AppUser(id: user.uid, email: user.email);
-    }
-    return null;
   }
 
   // Sign out
   Future<void> signOut() async {
-    await _firebaseAuth.signOut();
-    await _googleSignIn.signOut();
+    await firebase_auth.FirebaseAuth.instance.signOut();
   }
 
-  // Get current user
+  // Get current user (via Firebase)
   AppUser? getCurrentUser() {
-    final user = _firebaseAuth.currentUser;
+    final user = firebase_auth.FirebaseAuth.instance.currentUser;
     if (user != null) {
       return AppUser(id: user.uid, email: user.email);
     }
     return null;
   }
 
-  // Automatically provision the shared profile row in Supabase if it doesn't exist
-  Future<void> createUserProfileIfNotExist(String uid, String? email, String? fullName) async {
-    try {
-      final profile = await getProfile(sharedDeviceId);
-      if (profile == null) {
-        await _supabase.from('profiles').insert({
-          'id': sharedDeviceId,
-          'email': email,
-          'full_name': fullName ?? "Solak System",
-          'number_of_plants': 3,
-          'dark_mode': false,
-          'notifications': true,
-          'language': 'English',
-          'motor_active': false,
-          'daily_watering_enabled': false,
-          'daily_watering_time': '08:00:00',
-          'watering_duration': 15,
-          'sleep_interval': 600,
-        });
-        print('Created shared profile row: $sharedDeviceId');
-      }
-    } catch (e) {
-      print('Error creating profile: $e');
-    }
-  }
-
-  // Get user profile (Real Database query)
+  // Get user profile
   Future<Map<String, dynamic>?> getProfile(String userId) async {
     try {
-      final response = await _supabase
+      var response = await _supabase
           .from('profiles')
           .select()
-          .eq('id', sharedDeviceId)
-          .single();
+          .eq('id', userId)
+          .maybeSingle();
+
+      if (response == null && userId != 'IIRfy38Wh2RJegWK2x1AOHN0xQt2') {
+        response = await _supabase
+            .from('profiles')
+            .select()
+            .eq('id', 'IIRfy38Wh2RJegWK2x1AOHN0xQt2')
+            .maybeSingle();
+      }
 
       return response;
     } catch (e) {
@@ -138,28 +110,71 @@ class SupabaseService {
     }
   }
 
-  // Update profile (Real Database query)
+  // Update profile
   Future<void> updateProfile(Map<String, dynamic> updates) async {
-    await _supabase
-        .from('profiles')
-        .update(updates)
-        .eq('id', sharedDeviceId);
+    final user = firebase_auth.FirebaseAuth.instance.currentUser;
+    final targetId = user?.uid ?? 'IIRfy38Wh2RJegWK2x1AOHN0xQt2';
+
+    // 1. Update the hardcoded ESP32 profile row
+    try {
+      await _supabase
+          .from('profiles')
+          .update(updates)
+          .eq('id', 'IIRfy38Wh2RJegWK2x1AOHN0xQt2');
+    } catch (e) {
+      print('Warning: Failed updating ESP32 profile row: $e');
+    }
+
+    // 2. Also update the user's specific Firebase profile row if different
+    if (user != null && targetId != 'IIRfy38Wh2RJegWK2x1AOHN0xQt2') {
+      try {
+        await _supabase
+            .from('profiles')
+            .update(updates)
+            .eq('id', targetId);
+      } catch (e) {
+        print('Warning: Failed updating user profile row: $e');
+      }
+    }
   }
 
-  // Insert telemetry (for ESP32 to call)
-  Future<void> insertTelemetry(Map<String, dynamic> telemetryData) async {
-    await _supabase.from('telemetry').insert(telemetryData);
+  // Get user's devices
+  Future<List<Map<String, dynamic>>> getDevices() async {
+    final user = firebase_auth.FirebaseAuth.instance.currentUser;
+    if (user == null) return [];
+    try {
+      final response = await _supabase
+          .from('devices')
+          .select()
+          .eq('owner_id', user.uid);
+      return List<Map<String, dynamic>>.from(response);
+    } catch (e) {
+      print('Error getting devices: $e');
+      return [];
+    }
+  }
+  
+  // Register a new device
+  Future<void> registerDevice(String macAddress) async {
+    final user = firebase_auth.FirebaseAuth.instance.currentUser;
+    if (user != null) {
+      try {
+        await _supabase.from('devices').upsert({
+          'id': macAddress,
+          'owner_id': user.uid,
+          'name': 'New Solak Plant',
+          'status': 'online',
+        });
+      } catch (e) {
+        print('Error registering device: $e');
+      }
+    }
   }
 
-  // Get latest telemetry for current user
-  Future<Map<String, dynamic>?> getTelemetry() async {
-    return getLatestTelemetry(sharedDeviceId);
-  }
-
-  // Get latest telemetry for a specific user ID (Real Database query)
+  // Get latest telemetry for a specific user ID
   Future<Map<String, dynamic>?> getLatestTelemetry(String userId) async {
     try {
-      // Try querying by the passed userId first (matches what ESP32 sends)
+      // 1. Try querying with the active user ID
       var response = await _supabase
           .from('telemetry')
           .select()
@@ -168,18 +183,18 @@ class SupabaseService {
           .limit(1)
           .maybeSingle();
 
-      // Fallback: if no result, try with the shared device ID
-      if (response == null) {
+      // 2. If null, try the default ESP32 user ID
+      if (response == null && userId != 'IIRfy38Wh2RJegWK2x1AOHN0xQt2') {
         response = await _supabase
             .from('telemetry')
             .select()
-            .eq('user_id', sharedDeviceId)
+            .eq('user_id', 'IIRfy38Wh2RJegWK2x1AOHN0xQt2')
             .order('created_at', ascending: false)
             .limit(1)
             .maybeSingle();
       }
 
-      // Last fallback: get the most recent telemetry row regardless of user_id
+      // 3. Fallback: get the absolute latest telemetry row regardless of user_id
       if (response == null) {
         response = await _supabase
             .from('telemetry')
@@ -198,7 +213,10 @@ class SupabaseService {
 
   // Upload avatar to storage
   Future<String?> uploadAvatar(String filePath) async {
-    final fileName = 'avatar_$sharedDeviceId.jpg';
+    final user = _supabase.auth.currentUser;
+    if (user == null) return null;
+    
+    final fileName = 'avatar_${user.id}.jpg';
     try {
       await _supabase.storage
           .from('avatars')
@@ -208,7 +226,6 @@ class SupabaseService {
             fileOptions: const supabase.FileOptions(upsert: true),
           );
 
-      // Get public URL
       final avatarUrl = _supabase.storage.from('avatars').getPublicUrl(fileName);
       return avatarUrl;
     } catch (e) {

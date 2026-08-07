@@ -63,7 +63,7 @@ class _EnergyPageState extends State<EnergyPage> with TickerProviderStateMixin {
 
   Future<void> _loadTelemetry() async {
     try {
-      final userId = _supabaseService.getCurrentUser()?.id ?? SupabaseService.sharedDeviceId;
+      final userId = _supabaseService.getCurrentUser()?.id ?? '';
       if (userId != null) {
         final telemetry = await _supabaseService.getLatestTelemetry(userId);
         if (telemetry != null && mounted) {

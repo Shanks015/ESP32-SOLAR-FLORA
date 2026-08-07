@@ -1,9 +1,9 @@
 name: Android Shorebird OTA
 
 on:
-  push:
-    branches:
-      - main
+  # Deliberately manual-only. A release must not fire on every push: Shorebird
+  # rejects a duplicate release version, so an auto-release would burn a full
+  # build and then fail until pubspec version is bumped.
   workflow_dispatch:
     inputs:
       mode:
@@ -15,7 +15,7 @@ on:
           - patch
           - release
       release_version:
-        description: 'Release version to patch (e.g. 1.0.1+2). Required when mode=patch.'
+        description: 'Release version to patch (e.g. 1.0.2+3). Required when mode=patch.'
         required: false
         type: string
 
@@ -53,14 +53,14 @@ jobs:
         run: flutter pub get
 
       - name: Shorebird release (Android)
-        if: github.event_name == 'push' || inputs.mode == 'release'
+        if: inputs.mode == 'release'
         env:
           SHOREBIRD_TOKEN: ${{ secrets.SHOREBIRD_TOKEN }}
         run: |
           shorebird release android --artifact apk --verbose 2>&1 | tee build_log.txt
 
       - name: Shorebird patch (Android OTA)
-        if: github.event_name == 'workflow_dispatch' && inputs.mode == 'patch'
+        if: inputs.mode == 'patch'
         env:
           SHOREBIRD_TOKEN: ${{ secrets.SHOREBIRD_TOKEN }}
         run: |
@@ -80,7 +80,7 @@ jobs:
           path: build_log.txt
 
       - name: Upload APK Artifact
-        if: github.event_name == 'push' || inputs.mode == 'release'
+        if: inputs.mode == 'release'
         uses: actions/upload-artifact@v4
         with:
           name: Solak_Android_APK

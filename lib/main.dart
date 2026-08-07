@@ -5,11 +5,19 @@ import 'pages/settings_page.dart';
 import 'pages/status_page.dart';
 import 'pages/energy_page.dart';
 import 'pages/login_page.dart';
+import 'pages/device_setup_page.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 
 import 'package:google_fonts/google_fonts.dart';
 
+import 'services/update_service.dart';
+
 // Global notifier for dynamic theme switching (Dark Mode vs Light Mode)
 final ValueNotifier<ThemeMode> themeModeNotifier = ValueNotifier(ThemeMode.light);
+
+// Shared Shorebird OTA updater, read by the status page to show the patch number.
+final UpdateService updateService = UpdateService();
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -22,6 +30,13 @@ void main() async {
     url: dotenv.env['SUPABASE_URL'] ?? '',
     anonKey: dotenv.env['SUPABASE_ANON_KEY'] ?? '',
   );
+
+  // Initialize Firebase
+  await Firebase.initializeApp();
+
+  // Initialize Shorebird OTA updater, then check for a patch in the background.
+  await updateService.initialize();
+  updateService.checkAndDownloadUpdate(); // intentionally NOT awaited — don't block launch
 
   runApp(const MyApp());
 }
@@ -72,12 +87,15 @@ class MyApp extends StatelessWidget {
             ),
             dividerColor: const Color(0xFF2A3D31),
           ),
-          home: const StatusPage(),
+          home: FirebaseAuth.instance.currentUser != null
+              ? const StatusPage()
+              : const LoginPage(),
           routes: {
             '/status': (context) => const StatusPage(),
             '/energy': (context) => const EnergyPage(),
             '/settings': (context) => const SettingsPage(),
             '/login': (context) => const LoginPage(),
+            '/device-setup': (context) => const DeviceSetupPage(),
           },
         );
       },

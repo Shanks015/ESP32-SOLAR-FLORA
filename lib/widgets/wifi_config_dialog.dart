@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:http/http.dart' as http;
 import 'package:url_launcher/url_launcher.dart';
+import '../services/supabase_service.dart';
 
 class WifiConfigDialog extends StatefulWidget {
   const WifiConfigDialog({Key? key}) : super(key: key);
@@ -13,6 +14,7 @@ class WifiConfigDialog extends StatefulWidget {
 }
 
 class _WifiConfigDialogState extends State<WifiConfigDialog> {
+  final SupabaseService _supabaseService = SupabaseService();
   // 0 = instructions, 1 = checking, 2 = ready (portal reachable), 3 = not reachable
   int _step = 0;
   bool _isChecking = false;
@@ -40,7 +42,9 @@ class _WifiConfigDialogState extends State<WifiConfigDialog> {
   }
 
   Future<void> _openPortal() async {
-    final uri = Uri.parse('http://192.168.4.1/');
+    final user = _supabaseService.getCurrentUser();
+    final uid = user?.id ?? '';
+    final uri = Uri.parse('http://192.168.4.1/?user_id=$uid');
     try {
       await launchUrl(uri, mode: LaunchMode.externalApplication);
     } catch (_) {

@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:supabase_flutter/supabase_flutter.dart' as supabase;
 import '../services/supabase_service.dart';
+import '../main.dart' show updateService;
 import '../widgets/custom_widgets.dart';
 import '../widgets/wifi_config_dialog.dart';
 
@@ -48,6 +49,13 @@ class _StatusPageState extends State<StatusPage> with TickerProviderStateMixin {
   bool _dailyWateringEnabled = false;
   String _dailyWateringTime = '08:00:00';
 
+  // Shows the live Shorebird patch number, or plain 'Solak' when running a
+  // build without the updater (e.g. `flutter run`) or on an unpatched release.
+  String get _appBarTitle {
+    final patch = updateService.currentPatchNumber;
+    return patch == null ? 'Solak' : 'Solak (Patch $patch)';
+  }
+
   @override
   void initState() {
     super.initState();
@@ -87,7 +95,7 @@ class _StatusPageState extends State<StatusPage> with TickerProviderStateMixin {
   Future<void> _loadTelemetry() async {
     try {
       // Default to shared_device_001 so any user (even logged out) can view/control
-      final userId = _supabaseService.getCurrentUser()?.id ?? SupabaseService.sharedDeviceId;
+      final userId = _supabaseService.getCurrentUser()?.id ?? '';
       if (true) {
         final telemetry = await _supabaseService.getLatestTelemetry(userId);
         if (telemetry != null && mounted) {
@@ -191,15 +199,18 @@ class _StatusPageState extends State<StatusPage> with TickerProviderStateMixin {
   Future<void> _startWatering() async {
     if (_isWatering) return;
 
-    _triggerLocalWateringUI();
-
     try {
-      final userId = _supabaseService.getCurrentUser()?.id ?? SupabaseService.sharedDeviceId;
-      if (userId != null) {
+      final userId = _supabaseService.getCurrentUser()?.id ?? '';
+      if (userId.isNotEmpty) {
         await _supabaseService.updateProfile({'motor_active': true});
+        _triggerLocalWateringUI(); // Only trigger UI if db update succeeded
       }
     } catch (e) {
-      print('Error starting pump command: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to send command to device: $e')),
+        );
+      }
     }
   }
 
@@ -222,7 +233,7 @@ class _StatusPageState extends State<StatusPage> with TickerProviderStateMixin {
           });
         }
         try {
-          final userId = _supabaseService.getCurrentUser()?.id ?? SupabaseService.sharedDeviceId;
+          final userId = _supabaseService.getCurrentUser()?.id ?? '';
           if (userId != null) {
             await _supabaseService.updateProfile({'motor_active': false});
           }
@@ -285,7 +296,7 @@ class _StatusPageState extends State<StatusPage> with TickerProviderStateMixin {
     });
 
     try {
-      final userId = _supabaseService.getCurrentUser()?.id ?? SupabaseService.sharedDeviceId;
+      final userId = _supabaseService.getCurrentUser()?.id ?? '';
       if (userId != null) {
         await _supabaseService.updateProfile({
           'scheduled_watering_time': targetTime.toIso8601String(),
@@ -309,7 +320,7 @@ class _StatusPageState extends State<StatusPage> with TickerProviderStateMixin {
 
   Future<void> _clearDbTimer() async {
     try {
-      final userId = _supabaseService.getCurrentUser()?.id ?? SupabaseService.sharedDeviceId;
+      final userId = _supabaseService.getCurrentUser()?.id ?? '';
       if (userId != null) {
         await _supabaseService.updateProfile({
           'scheduled_watering_time': null,
@@ -334,7 +345,7 @@ class _StatusPageState extends State<StatusPage> with TickerProviderStateMixin {
       _wateringDuration = seconds;
     });
     try {
-      final userId = _supabaseService.getCurrentUser()?.id ?? SupabaseService.sharedDeviceId;
+      final userId = _supabaseService.getCurrentUser()?.id ?? '';
       if (userId != null) {
         await _supabaseService.updateProfile({
           'watering_duration': seconds,
@@ -352,7 +363,7 @@ class _StatusPageState extends State<StatusPage> with TickerProviderStateMixin {
       _dailyWateringEnabled = value;
     });
     try {
-      final userId = _supabaseService.getCurrentUser()?.id ?? SupabaseService.sharedDeviceId;
+      final userId = _supabaseService.getCurrentUser()?.id ?? '';
       if (userId != null) {
         await _supabaseService.updateProfile({
           'daily_watering_enabled': value,
@@ -383,7 +394,7 @@ class _StatusPageState extends State<StatusPage> with TickerProviderStateMixin {
         _dailyWateringTime = formattedTime;
       });
       try {
-        final userId = _supabaseService.getCurrentUser()?.id ?? SupabaseService.sharedDeviceId;
+        final userId = _supabaseService.getCurrentUser()?.id ?? '';
         if (userId != null) {
           await _supabaseService.updateProfile({
             'daily_watering_time': formattedTime,
@@ -458,7 +469,7 @@ class _StatusPageState extends State<StatusPage> with TickerProviderStateMixin {
     final Color primaryColor = isDark ? const Color(0xFFB6CBC2) : const Color(0xFF4F635B);
     return Scaffold(
       backgroundColor: scaffoldBg,
-      appBar: const CustomAppBar(title: 'Solak'),
+      appBar: CustomAppBar(title: _appBarTitle),
       body: AmbientShaderBackground(
         isCharging: _isCharging,
         child: Stack(
@@ -467,9 +478,13 @@ class _StatusPageState extends State<StatusPage> with TickerProviderStateMixin {
               child: Column(
                 children: [
                   Expanded(
-                    child: SingleChildScrollView(
-                      physics: const BouncingScrollPhysics(),
-                      padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 16.0),
+                    child: RefreshIndicator(
+                      onRefresh: _loadTelemetry,
+                      color: primaryColor,
+                      backgroundColor: cardColor,
+                      child: SingleChildScrollView(
+                        physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
+                        padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 16.0),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.center,
                         children: [
@@ -541,10 +556,7 @@ class _StatusPageState extends State<StatusPage> with TickerProviderStateMixin {
                                   const SizedBox(height: 8),
                                   InkWell(
                                     onTap: () {
-                                      showDialog(
-                                        context: context,
-                                        builder: (context) => const WifiConfigDialog(),
-                                      );
+                                      Navigator.pushNamed(context, '/device-setup');
                                     },
                                     child: Row(
                                       mainAxisSize: MainAxisSize.min,
@@ -948,6 +960,7 @@ class _StatusPageState extends State<StatusPage> with TickerProviderStateMixin {
                         ],
                       ),
                     ),
+                  ),
                   ),
 
                   // Navigation Bar

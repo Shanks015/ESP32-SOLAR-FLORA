@@ -47,7 +47,7 @@ Create a new Supabase project and execute the required SQL schema to set up the 
 ### 2. Firmware (ESP32)
 1. Rename `secrets_template.h` to `secrets.h` and populate it with your Supabase REST URL and anon key.
 2. Flash `esp32_telemetry.ino` to your ESP32. 
-3. On first boot, the ESP32 will host a Wi-Fi network named **Solak_Setup** (Password: `solak1234`). Connect to this network using the mobile app to provision your home Wi-Fi credentials.
+3. On first boot, the ESP32 will host a Wi-Fi network named **Solak_Setup**  Connect to this network using the mobile app to provision your home Wi-Fi credentials.
 
 ### 3. Mobile App (Flutter)
 1. Navigate to the root directory and run `flutter pub get`.

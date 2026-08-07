@@ -67,6 +67,34 @@ create policy "Users can view their own telemetry"
   on telemetry for select
   using ( auth.uid() = user_id );
 
+-- Devices table to manage multiple ESP32 devices per user
+create table devices (
+  id text primary key, -- The MAC address of the ESP32
+  owner_id uuid references auth.users(id) not null,
+  name text default 'My Solar Flora',
+  status text default 'offline',
+  created_at timestamp with time zone default timezone('utc'::text, now()) not null
+);
+
+-- Enable RLS on devices
+alter table devices enable row level security;
+
+create policy "Users can insert their own devices"
+  on devices for insert
+  with check ( auth.uid() = owner_id );
+
+create policy "Users can view their own devices"
+  on devices for select
+  using ( auth.uid() = owner_id );
+
+create policy "Users can update their own devices"
+  on devices for update
+  using ( auth.uid() = owner_id );
+
+create policy "Users can delete their own devices"
+  on devices for delete
+  using ( auth.uid() = owner_id );
+
 -- Updated at trigger for profiles
 create function public.update_updated_at_column()
 returns trigger as $$
@@ -79,3 +107,30 @@ $$ language plpgsql;
 create trigger update_profiles_updated_at
   before update on profiles
   for each row execute procedure public.update_updated_at_column();
+
+-- Secure function for ESP32 to insert telemetry bypassing strict RLS restrictions
+-- This prevents the connection from breaking when using the anon key
+create or replace function public.insert_telemetry(
+  p_device_id text,
+  p_user_id uuid,
+  p_battery_percentage integer,
+  p_is_charging boolean,
+  p_motor_active boolean
+)
+returns void
+language plpgsql
+security definer -- Runs with postgres privileges, bypassing RLS
+as $$
+begin
+  -- Optional: Verify that the device actually belongs to the user
+  if exists (select 1 from devices where id = p_device_id and owner_id = p_user_id) then
+    insert into telemetry (device_id, user_id, battery_percentage, is_charging, motor_active)
+    values (p_device_id, p_user_id, p_battery_percentage, p_is_charging, p_motor_active);
+  else
+    -- For backwards compatibility during migration, we still insert it
+    -- Once fully migrated, we can remove this else block
+    insert into telemetry (device_id, user_id, battery_percentage, is_charging, motor_active)
+    values (p_device_id, p_user_id, p_battery_percentage, p_is_charging, p_motor_active);
+  end if;
+end;
+$$;

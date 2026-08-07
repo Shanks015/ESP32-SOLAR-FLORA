@@ -9,11 +9,13 @@
 #include <DNSServer.h>
 #include <ArduinoOTA.h>
 #include <ESPmDNS.h>
+#include <esp_task_wdt.h>
 
 // --- Network & Supabase Credentials ---
 #include "secrets.h" // secrets.h no longer needs SSID and Password!
 
-const char* deviceId = "ESP32_SOLAR_001";
+String macAddress;
+String activeUserId;
 
 // --- Hardware Pins ---
 const int batteryPin = 34;   
@@ -66,13 +68,21 @@ void loadWiFiCredentials(String &ssid, String &password) {
   preferences.begin("solak-wifi", true);
   ssid = preferences.getString("ssid", "");
   password = preferences.getString("password", "");
+  activeUserId = preferences.getString("userid", "");
+  if (activeUserId == "") {
+    activeUserId = String(userId); // Fallback to secrets.h
+  }
   preferences.end();
 }
 
-void saveWiFiCredentials(String ssid, String password) {
+void saveWiFiCredentials(String ssid, String password, String uid) {
   preferences.begin("solak-wifi", false);
   preferences.putString("ssid", ssid);
   preferences.putString("password", password);
+  if (uid.length() > 0) {
+    preferences.putString("userid", uid);
+    activeUserId = uid;
+  }
   preferences.end();
 }
 
@@ -130,6 +140,7 @@ void startSoftAPProvisioning() {
   
   // 1. Root page handler serving a premium WiFi Captive Portal HTML form
   server.on("/", HTTP_GET, []() {
+    String uidParam = server.arg("user_id");
     String html = "<!DOCTYPE html><html><head><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">";
     html += "<title>Solak WiFi Setup</title><style>";
     html += "body { background-color: #0a0f0a; color: white; font-family: sans-serif; text-align: center; padding: 20px; }";
@@ -186,6 +197,7 @@ void startSoftAPProvisioning() {
     html += "<button type=\"button\" class=\"btn-refresh\" onclick=\"rescan()\">↻ Scan Networks</button>";
     html += "<div id=\"status\"></div>";
     html += "<form method=\"POST\" action=\"/connect_html\">";
+    html += "<input type=\"hidden\" name=\"user_id\" value=\"" + uidParam + "\">";
     html += "<select id=\"ssid-select\" style=\"display:none;\" onchange=\"onSelectChange()\"></select><br>";
     html += "<input type=\"text\" id=\"ssid-input\" name=\"ssid\" placeholder=\"Wi-Fi Network Name\" required><br>";
     html += "<input type=\"password\" name=\"pass\" placeholder=\"Wi-Fi Password\"><br>";
@@ -201,8 +213,9 @@ void startSoftAPProvisioning() {
   server.on("/connect_html", HTTP_POST, []() {
     String ssid = server.arg("ssid");
     String pass = server.arg("pass");
+    String uid = server.arg("user_id"); // Optional for manual HTML
     if (ssid.length() > 0) {
-      saveWiFiCredentials(ssid, pass);
+      saveWiFiCredentials(ssid, pass, uid);
       softAPConfigReceived = true;
       String html = "<html><head><meta name='viewport' content='width=device-width, initial-scale=1'><style>body{background-color:#0a0f0a;color:white;font-family:sans-serif;text-align:center;padding:50px;}h2{color:#34d399;}</style></head><body><h2>Credentials Saved!</h2><p>Connecting to WiFi. You can close this window now.</p></body></html>";
       server.send(200, "text/html", html);
@@ -250,8 +263,9 @@ void startSoftAPProvisioning() {
     if (!error) {
       String ssid = doc["ssid"] | "";
       String pass = doc["pass"] | "";
+      String uid = doc["user_id"] | "";
       if (ssid.length() > 0) {
-        saveWiFiCredentials(ssid, pass);
+        saveWiFiCredentials(ssid, pass, uid);
         softAPConfigReceived = true;
         server.send(200, "application/json", "{\"status\":\"connecting\"}");
         return;
@@ -281,18 +295,12 @@ void startSoftAPProvisioning() {
   Serial.println("SoftAP Provisioning WebServer started.");
 }
 
-// Safe WiFi start: always do a hard reset of the station driver before begin().
-// This is the ONLY reliable way to avoid "sta is connecting, cannot set config" on ESP32.
+// Safe WiFi start: avoid killing the AP if it's running
 void safeWifiBegin(const char* ssid, const char* pass) {
   Serial.printf("[WiFi] safeWifiBegin() -> SSID: %s\n", ssid);
 
-  // 1. Bring the station fully down
-  WiFi.disconnect(true); // true = also clear IDF's internal AP config
-  delay(300);            // Wait for IDF state machine to reach IDLE
-
-  // 2. In AP+STA mode the AP stays alive; we only reset the STA interface
-  //    Re-setting WIFI_AP_STA re-initialises the STA side cleanly.
-  WiFi.mode(WIFI_AP_STA);
+  // Disconnect station only, do not shut off the radio (which would kill the AP)
+  WiFi.disconnect(false);
   delay(100);
 
   // 3. Now begin — IDF is guaranteed to be in IDLE state
@@ -319,8 +327,21 @@ void connectWiFi() {
 
 void setup() {
   Serial.begin(115200);
-  delay(500);
+  delay(3000); // 3-second delay to stabilize power and Serial Monitor before starting
   
+  // Initialize Hardware Watchdog Timer (30 seconds)
+#if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 0, 0)
+  esp_task_wdt_config_t twdt_config = {
+      .timeout_ms = 30000,
+      .idle_core_mask = (1 << portNUM_PROCESSORS) - 1,
+      .trigger_panic = true,
+  };
+  esp_task_wdt_init(&twdt_config);
+#else
+  esp_task_wdt_init(30, true);
+#endif
+  esp_task_wdt_add(NULL);
+
   Serial.println("\n-------------------------------------------");
   Serial.println("ESP32 Solak - Continuous Mode");
   Serial.println("-------------------------------------------");
@@ -334,6 +355,10 @@ void setup() {
   // 1. SCAN FIRST while the radio is completely idle (nothing else running yet)
   //    Results are cached in memory and served by /scan at any time.
   WiFi.mode(WIFI_STA);
+  macAddress = WiFi.macAddress();
+  Serial.print("Device MAC Address: ");
+  Serial.println(macAddress);
+  
   performWifiScan();
 
   // 2. Start SoftAP + attempt WiFi connection (non-blocking from here)
@@ -358,6 +383,8 @@ void setup() {
 }
 
 void loop() {
+  esp_task_wdt_reset(); // Reset the watchdog timer on every loop
+  
   ArduinoOTA.handle(); // Listen for wireless firmware updates
 
   // Handle SoftAP provisioning server if active
@@ -400,18 +427,12 @@ void loop() {
       WiFi.disconnect(true);
 
     } else if (millis() - wifiConnectStartTime > 20000) {
-      // TIMEOUT — driver is stuck. Force a full hard reset.
+      // TIMEOUT
       wifiConnecting = false;
-      Serial.println("[WiFi] Connection timed out. Performing hard reset of WiFi driver...");
-      WiFi.mode(WIFI_OFF);   // Completely shut down radio
-      delay(500);
-      WiFi.mode(WIFI_AP_STA); // Restart radio in AP+STA mode
-      delay(200);
-      WiFi.softAP("Solak_Setup"); // Restart the AP
-      delay(200);
-      Serial.println("[WiFi] WiFi driver reset. Will retry on next cycle.");
+      Serial.println("[WiFi] Connection timed out. Disconnecting station...");
+      WiFi.disconnect(false); 
+      Serial.println("[WiFi] Will retry on next cycle.");
     }
-    // Still connecting — do nothing and let it run
   } else if (WiFi.status() != WL_CONNECTED) {
     // Not connecting and not connected — schedule a retry
     static unsigned long lastReconnectAttempt = 0;
@@ -466,7 +487,9 @@ void loop() {
 void processWateringLogic() {
   WiFiClientSecure client;
   client.setInsecure(); // Bypass SSL certificate validation to prevent connection code -1
+  client.setTimeout(8); // 8 second socket timeout
   HTTPClient http;
+  http.setTimeout(8000); // 8 second HTTP timeout
   
   String url;
   if (hasWifiResetColumn) {
@@ -600,7 +623,7 @@ void updateDatabaseMotorActive(bool active) {
   WiFiClientSecure client;
   client.setInsecure(); // Bypass SSL validation
   HTTPClient http;
-  String url = String(supabaseUrl) + "/rest/v1/profiles?id=eq." + String(userId);
+  String url = String(supabaseUrl) + "/rest/v1/profiles?id=eq." + activeUserId;
   http.begin(client, url);
   http.setReuse(false); // Fix memory leak
   
@@ -633,7 +656,7 @@ void updateDatabaseWifiReset(bool reset) {
   WiFiClientSecure client;
   client.setInsecure(); // Bypass SSL validation
   HTTPClient http;
-  String url = String(supabaseUrl) + "/rest/v1/profiles?id=eq." + String(userId);
+  String url = String(supabaseUrl) + "/rest/v1/profiles?id=eq." + activeUserId;
   http.begin(client, url);
   http.setReuse(false);
   
@@ -665,8 +688,10 @@ void updateDatabaseWifiReset(bool reset) {
 void sendTelemetryData() {
   WiFiClientSecure client;
   client.setInsecure(); // Bypass SSL validation
+  client.setTimeout(8); // 8 second socket timeout
   HTTPClient http;
-  String url = String(supabaseUrl) + "/rest/v1/telemetry";
+  http.setTimeout(8000); // 8 second HTTP timeout
+  String url = String(supabaseUrl) + "/rest/v1/rpc/insert_telemetry";
   http.begin(client, url);
   http.setReuse(false); // Prevent -1 connection leak
 
@@ -731,24 +756,20 @@ void sendTelemetryData() {
   Serial.print(solarVoltage);
   Serial.println("V");
   
-  // Build JSON
+  // Build JSON for RPC parameters
   #if ARDUINOJSON_VERSION_MAJOR >= 7
   JsonDocument doc;
   #else
   DynamicJsonDocument doc(512);
   #endif
 
-  doc["device_id"] = deviceId;
-  doc["user_id"] = userId;
-  doc["battery_percentage"] = batteryPercentage;
-  doc["is_charging"] = isCharging; // Set by actual solar voltage now!
-  doc["solar_voltage"] = solarVoltage;
-  doc["motor_active"] = motorActive;
-  if (soilSensorEnabled) {
-    doc["soil_moisture"] = soilMoistureRaw;
-  } else {
-    doc["soil_moisture"] = nullptr; // Send null to clear it from app UI
-  }
+  doc["p_device_id"] = macAddress;
+  doc["p_user_id"] = activeUserId;
+  doc["p_battery_percentage"] = batteryPercentage;
+  doc["p_is_charging"] = isCharging;
+  doc["p_motor_active"] = motorActive;
+  // Note: soil moisture and solar voltage are not in the current RPC function.
+  // If you need them, you should update the RPC function to accept them.
 
   String jsonPayload;
   serializeJson(doc, jsonPayload);
